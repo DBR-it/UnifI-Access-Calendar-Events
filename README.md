@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Unifi.png" alt="Your Image Alt Text" style="width: 100%; height: auto;">
+  <img src="Banner.png" alt="Your Image Alt Text" style="width: 100%; height: auto;">
 </p>
 
 # UniFi Access Door Manager for Home Assistant
