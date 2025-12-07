@@ -15,7 +15,6 @@ This project is a community-created automation script and is **not** an official
 4.  **Configuration Responsibility:** Incorrect setup of entity IDs, helpers, or time zones can result in doors remaining unlocked overnight or locking unexpectedly. It is your responsibility to test your configuration thoroughly.
 
 ---
-
 ## 📺 Video Tutorial
 
 **Need help setting this up? Watch my step-by-step guide on YouTube:**
@@ -26,8 +25,8 @@ Coming soon
 *(Click the image above to watch)*
 
 **If this project helped you, please don't forget to hit the Thumbs Up 👍 and Subscribe to the channel! It really helps out.**
-
 ---
+
 **Automate your UniFi Access doors based on Google/Outlook Calendar schedules.**
 
 This project allows Home Assistant to manage physical door locks by syncing with a calendar. It replaces the basic UniFi scheduling with advanced logic, including buffer times, safety lockdowns, night mode enforcement, and persistent "Keep Unlocked" rules.
