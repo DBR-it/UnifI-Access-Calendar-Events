@@ -25,12 +25,25 @@ This project allows Home Assistant to manage physical door locks by syncing with
 * **Universal Calendar Support:** Works with **any** calendar integration supported by Home Assistant (Google Calendar, Outlook 365, iCloud, CalDAV, Local Calendar, etc.). If Home Assistant can see the events, this script can use them.
 * **Smart Buffers:** Configurable "Pre-Start" and "Post-End" buffers to keep doors open slightly longer than the event itself (e.g., unlock 15 mins early).
 * **Persistent Unlocking:** Uses the UniFi "Keep Unlocked" rule instead of a momentary unlock command. This prevents the door from timing out and locking every 5 seconds.
-* **Manual Override Respect:** The script is "State Aware." If you manually set a door to **"Keep Locked"** corresponds to lockdown mode(via the UniFi App or HA), the script will detect this as an intentional override and **SKIP** that door until you reset it.
+* **Manual Override Respect:** The script is "State Aware." If you manually set a door to **"Keep Locked"** (which corresponds to **Lockdown Mode** in the UniFi App), the script will detect this as an intentional override and **SKIP** that door until you reset it.
 * **Night Mode ("The Bouncer"):** A security feature that forces all doors to lock at a set time (e.g., 11:59 PM). If a door is manually unlocked during the night, the script will automatically re-lock it within 60 seconds.
 * **Emergency Controls:**
     * **Lockdown Mode:** Instantly locks *all* doors via a single dashboard toggle.
     * **Maintenance Pause:** Pauses the automation completely for manual testing or hardware maintenance.
 * **Smart Notifications:** Choose between receiving alerts for *every* event or just a daily summary ("Schedule Started" / "Building Secured").
+
+---
+
+## 📅 How to Schedule Events (Multi-Door Logic)
+
+The script decides which door to open based on the **Keywords** you assign in `doors.yaml`.
+
+* **Where to put the keyword:** You must include the keyword in the **Event Title** (Subject). The script does **not** look at the description/body of the event.
+* **Controlling One Door:** Include that door's specific keyword in the title.
+    * *Example:* If Front Door uses `*`, an event named `Board Meeting *` will open only the Front Door.
+* **Controlling Multiple Doors:** To open multiple doors for the same event, simply include the keywords for **all** those doors in the title.
+    * *Example:* If Front Door is `*` and Side Door is `#`, an event named `Big Party * #` will unlock **both** doors.
+* **No Keyword?** If an event title does not contain a matching keyword, the door remains locked. This allows you to have private appointments on the same calendar without unlocking the building.
 
 ---
 
