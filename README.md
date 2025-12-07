@@ -7,12 +7,12 @@
 ### ⚠️ IMPORTANT DISCLAIMER: READ BEFORE USE
 **USE THIS SOFTWARE AT YOUR OWN RISK.**
 
-This project is a community-created automation script and is **not** an official product of Ubiquiti/UniFi or Home Assistant. By using this software, you acknowledge and agree to the following:
+This project is a community-created automation script and is **not** an official product of Ubiquiti/UniFi or Home Assistant. By downloading or using this software, you acknowledge and agree to the following:
 
-1.  **You are responsible for your own security.** The author(s) of this script accept **no liability** for any security breaches, unlocked doors, property damage, or theft resulting from the use or misuse of this software.
-2.  **Integration Dependencies:** This system relies entirely on third-party integrations (Home Assistant, UniFi Access, Pyscript, and Cloud Calendars). If any of these services fail, change their API, or lose internet connectivity, this automation **will fail**.
-3.  **Configuration Responsibility:** Incorrect setup of entity IDs, helpers, or time zones can result in doors remaining unlocked overnight or locking unexpectedly. It is your responsibility to test your configuration thoroughly before relying on it.
-4.  **No Warranty:** This software is provided "as is" without warranty of any kind.
+1.  **NO LIABILITY:** The author(s) of this script accept **zero responsibility or liability** for any consequences resulting from the use of this software. This includes, but is not limited to: security breaches, unlocked doors, property damage, theft, hardware failure, or personal injury. You are solely responsible for the security of your facility.
+2.  **NO WARRANTY:** This software is provided "as is," without warranty of any kind, express or implied.
+3.  **Integration Dependencies:** This system relies entirely on third-party integrations (Home Assistant, UniFi Access, Pyscript, and Cloud Calendars). If any of these services fail, change their API, or lose internet connectivity, this automation **will fail**.
+4.  **Configuration Responsibility:** Incorrect setup of entity IDs, helpers, or time zones can result in doors remaining unlocked overnight or locking unexpectedly. It is your responsibility to test your configuration thoroughly.
 
 ---
 
@@ -43,7 +43,11 @@ Home Assistant does **not** receive updates from cloud calendars instantly. It p
 * **The Risk:** If you create an event *now* for a meeting starting in 5 minutes, Home Assistant might not see it until *after* the meeting starts.
 * **The Solution:**
     1.  **Plan Ahead:** Add events to your calendar at least 20-30 minutes in advance.
-    2.  **Emergency Cancellation:** If you need to stop an event *immediately* while the door is unlocked, **DELETE the event** (do not just rename it). Deleting is often processed faster, but for instant results, use the **"Lockdown Mode"** helper on your dashboard.
+    2.  **Emergency Cancellation (Stop an event NOW):** If you delete an event, it may take 15 minutes to sync. To lock a door **immediately** without waiting:
+        * **Step 1:** Turn **ON** the "Pause Door Schedule" helper (this stops the script from interfering).
+        * **Step 2:** Manually **LOCK** the door using the UniFi Access app or Home Assistant.
+        * **Step 3:** Once the calendar syncs (event disappears), you can turn "Pause" back OFF.
+    * *Note: Do not use "Lockdown Mode" for simple cancellations, as that triggers a full building emergency lockdown.*
 * **Instant Alternative:** For immediate response times, use the **Local Calendar** integration built directly into Home Assistant. It has zero delay.
 
 ---
