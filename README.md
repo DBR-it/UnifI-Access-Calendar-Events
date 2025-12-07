@@ -16,6 +16,18 @@ This project is a community-created automation script and is **not** an official
 
 ---
 
+## 📺 Video Tutorial
+
+**Need help setting this up? Watch my step-by-step guide on YouTube:**
+
+Coming soon
+[![Watch the Video](https://img.youtube.com/vi/YOUR_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID_HERE)
+
+*(Click the image above to watch)*
+
+**If this project helped you, please don't forget to hit the Thumbs Up 👍 and Subscribe to the channel! It really helps out.**
+
+---
 **Automate your UniFi Access doors based on Google/Outlook Calendar schedules.**
 
 This project allows Home Assistant to manage physical door locks by syncing with a calendar. It replaces the basic UniFi scheduling with advanced logic, including buffer times, safety lockdowns, night mode enforcement, and persistent "Keep Unlocked" rules.
