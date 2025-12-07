@@ -25,7 +25,7 @@ This project allows Home Assistant to manage physical door locks by syncing with
 * **Universal Calendar Support:** Works with **any** calendar integration supported by Home Assistant (Google Calendar, Outlook 365, iCloud, CalDAV, Local Calendar, etc.). If Home Assistant can see the events, this script can use them.
 * **Smart Buffers:** Configurable "Pre-Start" and "Post-End" buffers to keep doors open slightly longer than the event itself (e.g., unlock 15 mins early).
 * **Persistent Unlocking:** Uses the UniFi "Keep Unlocked" rule instead of a momentary unlock command. This prevents the door from timing out and locking every 5 seconds.
-* **Manual Override Respect:** The script is "State Aware." If you manually set a door to **"Keep Locked"** (via the UniFi App or HA), the script will detect this as an intentional override and **SKIP** that door until you reset it.
+* **Manual Override Respect:** The script is "State Aware." If you manually set a door to **"Keep Locked"** corresponds to lockdown mode(via the UniFi App or HA), the script will detect this as an intentional override and **SKIP** that door until you reset it.
 * **Night Mode ("The Bouncer"):** A security feature that forces all doors to lock at a set time (e.g., 11:59 PM). If a door is manually unlocked during the night, the script will automatically re-lock it within 60 seconds.
 * **Emergency Controls:**
     * **Lockdown Mode:** Instantly locks *all* doors via a single dashboard toggle.
