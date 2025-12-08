@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Banner.png" alt="Your Image Alt Text" style="width: 100%; height: auto;">
+  <img src="Banner.png" alt="UniFi Access Door Manager Banner" style="width: 100%; height: auto;">
 </p>
 
 # UniFi Access Door Manager for Home Assistant
@@ -15,16 +15,17 @@ This project is a community-created automation script and is **not** an official
 4.  **Configuration Responsibility:** Incorrect setup of entity IDs, helpers, or time zones can result in doors remaining unlocked overnight or locking unexpectedly. It is your responsibility to test your configuration thoroughly.
 
 ---
+
 ## 📺 Video Tutorial
 
 **Need help setting this up? Watch my step-by-step guide on YouTube:**
 
-Coming soon
 [![Watch the Video](https://img.youtube.com/vi/YOUR_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID_HERE)
 
 *(Click the image above to watch)*
 
 **If this project helped you, please don't forget to hit the Thumbs Up 👍 and Subscribe to the channel! It really helps out.**
+
 ---
 
 **Automate your UniFi Access doors based on Google/Outlook Calendar schedules.**
@@ -105,12 +106,25 @@ You need to create "Helpers" to act as the settings knobs for your dashboard. Go
 | **Door Keyword** | `input_text.door_keyword` | Text | The keyword to look for in events (e.g., `*`). |
 | **Pre-Buffer** | `input_number.front_door_pre_buffer` | Number | Minutes to unlock *before* event. |
 | **Post-Buffer** | `input_number.front_door_post_buffer` | Number | Minutes to keep open *after* event. |
+| **Door Manager Memory** | `input_text.door_manager_memory` | Text | **Required.** Prevents repeat notifications after reboots. |
 
 ### Step 4: Download & Install Files
 1.  Download the **`doors.yaml`** and **`door_manager_ui.py`** files from this repository.
 2.  Using your File Editor (or VS Code) in Home Assistant, navigate to the `/config/` directory.
 3.  Find (or create) the folder named `pyscript`.
 4.  **Upload both files into the `/config/pyscript/` folder.**
+
+### Step 5: Import the Sync Blueprint
+This blueprint ensures your Dashboard Toggle turns ON/OFF automatically if you trigger a lockdown from the UniFi App.
+
+1.  Open the **`lockdown_sync.yaml`** file in this GitHub repository and copy the URL from your browser address bar.
+2.  In Home Assistant, go to **Settings > Automations & Scenes > Blueprints**.
+3.  Click **Import Blueprint** (bottom right).
+4.  Paste the URL you copied and click **Preview Blueprint**, then **Import**.
+5.  Once imported, click **Create Automation** and select your specific entities:
+    * **Dashboard Toggle:** `input_boolean.lockdown_mode`
+    * **Master Switch:** `switch.all_doors_lockdown`
+    * **Door Rule:** `select.door_xxx_door_lock_rule`
 
 ---
 
@@ -121,7 +135,8 @@ You **must** edit the `doors.yaml` file to match your specific system. Open the 
 
 1.  **Entity IDs:** Change `lock.door_0664` and `select.door_0664_door_lock_rule` to match your actual UniFi device names found in Step 1.
 2.  **Calendar Entity:** Update `calendar.ha` to the name of your specific calendar entity.
-3.  **Notifications:** Add your notification service (e.g., `notify.mobile_app_iphone`) and choose your style (`summary` or `all`).
+3.  **Physical Switch:** If you have a physical "All Doors Lockdown" switch in UniFi, add its entity ID to `lockdown_switch` in the settings block.
+4.  **Notifications:** Add your notification service (e.g., `notify.mobile_app_iphone`) and choose your style (`summary` or `all`).
 
 ---
 
