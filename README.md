@@ -47,20 +47,29 @@ This project allows Home Assistant to manage physical door locks by syncing with
 
 ---
 
-## 📅 How to Schedule Events (Multi-Door Logic)
+## 📅 How Scheduling Works (The Keyword System)
 
-The script decides which door to open based on the **Keywords** you assign in `doors.yaml`.
+Since you might have multiple doors (Front Door, Warehouse, Side Entrance) sharing one calendar, the script needs a way to know **which specific door** to unlock for a specific event.
 
-* **Where to put the keyword:** You must include the keyword in the **Event Title** (Subject). The script does **not** look at the description/body.
-* **Controlling One Door:** Include that door's specific keyword in the title.
-    * *Example:* If Front Door uses `*`, an event named `Board Meeting *` will open only the Front Door.
-* **Controlling Multiple Doors:** To open multiple doors, include the keywords for **all** those doors.
-    * *Example:* If Front Door is `*` and Side Door is `#`, an event named `Big Party * #` will unlock **both** doors.
-* **No Keyword?** If an event title does not contain a matching keyword, the door remains locked.
+It does this by looking for a **"Secret Code" (Keyword)** in your event title.
 
----
+### 1. The Setup (Making the Link)
+First, you assign a unique, short keyword to each door in your settings (inside `doors.yaml` or the Dashboard Helper).
+* **Front Door Keyword:** `D1`
+* **Warehouse Keyword:** `WH`
 
-## ☁️ CRITICAL WARNING: Cloud Calendar Delays
+### 2. The Trigger (Creating the Event)
+When you put an event on your Google/Outlook calendar, you simply **include that keyword in the Title**.
+* **Event Title:** `Board Meeting D1`
+    * **Result:** The script sees `D1`, looks up your settings, finds it belongs to **Front Door**, and unlocks it.
+
+### 3. The Master Key (Unlock EVERYTHING)
+If you configure a `global_unlock_keyword` in your `doors.yaml` (e.g., `ALL`), you can open every single door with one word.
+* **Event Title:** `Company Party ALL`
+    * **Result:** Unlocks **EVERY** door configured in the system.
+
+### 4. Privacy Protection
+If an event title does **not** contain a matching keyword (e.g., "Dentist Appointment"), the script ignores it completely. The doors stay locked.
 
 **Please read this if you use Google Calendar or Outlook 365.**
 
