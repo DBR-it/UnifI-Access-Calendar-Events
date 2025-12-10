@@ -1,0 +1,66 @@
+# ==============================================================================
+#  DASHBOARD CARD CODE
+# ==============================================================================
+#  1. Ensure you have "Mushroom Cards" installed from HACS.
+#  2. Go to your Dashboard -> Edit -> Add Card -> Manual.
+#  3. Paste the code below.
+#  4. Update the entity IDs to match your system.
+# ==============================================================================
+
+type: custom:mushroom-template-card
+primary: >
+  {% if is_state('switch.all_doors_lockdown', 'on') %}
+    GLOBAL LOCKDOWN
+  {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
+    SYSTEM PAUSED
+  {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
+    DOOR LOCKDOWN
+  {% elif is_state('lock.door_0664', 'unlocked') %}
+    SCHEDULE ACTIVE
+  {% else %}
+    SYSTEM READY
+  {% endif %}
+secondary: >
+  {% if is_state('switch.all_doors_lockdown', 'on') %}
+    Master Switch Active
+  {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
+    Maintenance Mode
+  {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
+    Manual Override
+  {% elif is_state('lock.door_0664', 'unlocked') %}
+    Door Unlocked by Calendar
+  {% else %}
+    Waiting for Next Event...
+  {% endif %}
+icon: >
+  {% if is_state('switch.all_doors_lockdown', 'on') %}
+    mdi:alert-decagram
+  {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
+    mdi:pause-octagon
+  {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
+    mdi:lock-alert
+  {% elif is_state('lock.door_0664', 'unlocked') %}
+    mdi:door-open
+  {% else %}
+    mdi:calendar-check
+  {% endif %}
+icon_color: >
+  {% if is_state('switch.all_doors_lockdown', 'on') %}
+    red
+  {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
+    blue
+  {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
+    deep-orange
+  {% elif is_state('lock.door_0664', 'unlocked') %}
+    cyan
+  {% else %}
+    green
+  {% endif %}
+layout: horizontal
+multiline_secondary: false
+tap_action:
+  action: none
+hold_action:
+  action: none
+double_tap_action:
+  action: none
