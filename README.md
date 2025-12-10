@@ -41,7 +41,7 @@ This project allows Home Assistant to manage physical door locks by syncing with
 * **Manual Override Respect:** The script is "State Aware." If you manually set a door to **"Keep Locked"** (Lockdown Mode), the script will detect this as an intentional override and **SKIP** that door until you reset it.
 * **Night Mode ("The Bouncer"):** Forces all doors to lock at a set time (e.g., 11:59 PM). If a door is manually unlocked during the night, the script re-locks it within 60 seconds.
 * **Emergency Controls:**
-    * **Lockdown Mode:** Instantly locks *all* doors via a single dashboard toggle.
+    * **Lockdown Mode:** Reacts instantly to the physical UniFi "Lock All Doors" switch or individual door overrides.
     * **Maintenance Pause:** Pauses the automation completely for manual testing or hardware maintenance.
 * **Smart Notifications:** Receive daily summaries ("Schedule Started") and critical safety alerts.
 
@@ -92,7 +92,6 @@ Go to **Settings > Devices & Services > Helpers** and create the following:
 | Name | Entity ID (Example) | Type | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Pause Door Schedule** | `input_boolean.pause_door_schedule` | Toggle | Master switch to pause automation. |
-| **Lockdown Mode** | `input_boolean.lockdown_mode` | Toggle | Emergency lock for ALL doors. |
 | **Door Keyword** | `input_text.door_keyword` | Text | The keyword to look for in events (e.g., `*`). |
 | **Pre-Buffer** | `input_number.front_door_pre_buffer` | Number | Minutes to unlock *before* event. |
 | **Post-Buffer** | `input_number.front_door_post_buffer` | Number | Minutes to keep open *after* event. |
@@ -103,18 +102,17 @@ Go to **Settings > Devices & Services > Helpers** and create the following:
 2.  Click the **3 Dots** (top right) > **Custom Repositories**.
 3.  **Repository:** Paste the URL of this GitHub repository.
 4.  **Category:** Select **Integration** from the dropdown menu.
-    * *(Note: HACS uses "Integration" for backend logic scripts like this).*
 5.  Click **Add**.
 6.  Find **"UniFi Access Door Manager"** in the list and click **Download**.
 
-### Step 5: Import the Sync Blueprint
-This blueprint ensures your Dashboard Toggle turns ON/OFF automatically if you trigger a lockdown from the UniFi App.
+### Step 5: Add the Status Card
+We have created a "Smart Status" card that shows you if the system is Running, Paused, or in Lockdown.
 
-1.  Open the **`lockdown_sync.yaml`** file in this GitHub repository and copy the URL from your browser address bar.
-2.  In Home Assistant, go to **Settings > Automations & Scenes > Blueprints**.
-3.  Click **Import Blueprint** (bottom right).
-4.  Paste the URL and click **Preview Blueprint**, then **Import**.
-5.  Create the automation and link your specific entities.
+1.  Open the **`dashboard_card.yaml`** file in this GitHub repository.
+2.  Copy the code.
+3.  In Home Assistant, go to **Dashboard > Edit > Add Card > Manual**.
+4.  Paste the code and update the entity IDs.
+    * *Note: Requires "Mushroom Cards" from HACS.*
 
 ---
 
