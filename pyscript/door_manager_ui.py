@@ -1,30 +1,17 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.1.1 (Fixes Pyscript Executor Error)
-# INCLUDES: Conflict Alerts + Memory Compression + UniFi-Only Lockdown + DYNAMIC MASTER KEY + AUTO-UPDATE CHECKER
+# MASTER VERSION: v1.1.0 (Stable)
+# FEATURES: Conflict Alerts + Memory Compression + UniFi-Only Lockdown + DYNAMIC MASTER KEY
 
 import json
 import os
 import sys
 from datetime import datetime, timedelta
 
-# --- VERSION CONTROL ---
-CURRENT_VERSION = "1.1.0"
-# Ensure this URL has NO SPACES in "pyscript"
-GITHUB_VERSION_URL = "https://raw.githubusercontent.com/DBR-it/UnifI-Access-Calendar-Events/main/version.txt"
-
-# --- HELPER FUNCTIONS (Must be at top level for task.executor) ---
-@pyscript_compile
-def get_github_version(url):
-    """
-    This function runs in a separate thread to avoid freezing Home Assistant.
-    It must be a 'compiled' function to work with task.executor.
-    """
-    import requests
-    try:
-        response = requests.get(url, timeout=10)
-        return response.text.strip()
-    except Exception:
-        return None
+# GLOBAL MEMORY
+if "last_unlock_tracker" not in locals():
+    last_unlock_tracker = {}
+if "last_nightly_report" not in locals():
+    last_nightly_report = {}
 
 @pyscript_compile
 def read_config_file(path):
@@ -34,14 +21,6 @@ def read_config_file(path):
             return yaml.safe_load(f)
     except Exception:
         return None
-
-# ------------------------------------------------------------------
-
-# GLOBAL MEMORY
-if "last_unlock_tracker" not in locals():
-    last_unlock_tracker = {}
-if "last_nightly_report" not in locals():
-    last_nightly_report = {}
 
 def parse_time(value):
     try:
@@ -72,7 +51,6 @@ def check_door_schedule():
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
     LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
     MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
-    UPDATE_SENSOR = "sensor.door_manager_update_status" 
     
     # NEW: DYNAMIC GLOBAL MASTER KEYWORD HELPER
     global_helper = settings.get("global_keyword_helper", None)
@@ -104,26 +82,6 @@ def check_door_schedule():
     except Exception as e:
         if DEBUG: log.warning(f"Memory Load Error: {e}")
         memory_data = {}
-
-    # --- UPDATE CHECKER LOGIC ---
-    last_check = memory_data.get("last_update_check")
-    # Check if we haven't checked today OR if sensor is missing
-    if last_check != today_str or state.get(UPDATE_SENSOR) in ["unknown", "unavailable"]:
-        try:
-            # We call the top-level function via task.executor
-            remote_ver = task.executor(get_github_version, GITHUB_VERSION_URL)
-            
-            if remote_ver and remote_ver != CURRENT_VERSION:
-                state.set(UPDATE_SENSOR, value="Update Available", attributes={"latest": remote_ver, "current": CURRENT_VERSION})
-                if DEBUG: log.info(f"🚀 Update Available: {remote_ver}")
-            else:
-                state.set(UPDATE_SENSOR, value="Up to Date", attributes={"latest": CURRENT_VERSION, "current": CURRENT_VERSION})
-            
-            memory_data["last_update_check"] = today_str
-            memory_changed = True
-        except Exception as e:
-            if DEBUG: log.warning(f"Update Check Failed: {e}")
-    # ----------------------------
 
     def save_memory():
         try:
