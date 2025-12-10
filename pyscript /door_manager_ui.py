@@ -1,6 +1,5 @@
 # door_manager_ui.py
-# MASTER VERSION: Fixed Import Scoping + Persistent Memory + Dual Lockdown + CONFLICT ALERTS + COMPRESSED MEMORY
-# REMOVED: Redundant Emergency Notifications (Handled by UniFi)
+# MASTER VERSION: Conflict Alerts + Memory Compression + UniFi-Only Lockdown
 
 import json
 import os
@@ -48,7 +47,7 @@ def check_door_schedule():
     if not settings: settings = data.pop("settings", {})
 
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
-    LOCKDOWN_ENTITY = settings.get("lockdown_entity", "input_boolean.lockdown_mode")
+    # REMOVED: Virtual Lockdown Entity
     LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
     MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
     DEBUG = settings.get("debug_logging", False)
@@ -74,15 +73,12 @@ def check_door_schedule():
 
     def save_memory():
         try:
-            # Clean up old dates
             clean_data = {k: v for k, v in memory_data.items() if v == today_str}
             
             # --- COMPRESSION CHECK ---
-            # If data is getting too big (>240 chars), aggressively remove old conflict keys
             json_str = json.dumps(clean_data)
             if len(json_str) > 240:
-                if DEBUG: log.warning("Memory near limit. Purging old warnings to save space.")
-                # Keep only core flags (Front Door, nightly) and dump conflicts
+                if DEBUG: log.warning("Memory near limit. Purging old warnings.")
                 clean_data = {k: v for k, v in clean_data.items() if not k.startswith("c_")}
                 json_str = json.dumps(clean_data)
             
@@ -90,21 +86,20 @@ def check_door_schedule():
         except Exception as e:
             if DEBUG: log.warning(f"Failed to save memory: {e}")
 
-    # Helper to collect all notification services
+    # Helper to collect notification services
     unique_notify_services = set()
     for d, c in data.items():
         if d == "Settings": continue
         s = c.get("notification_service")
         if s: unique_notify_services.add(s)
 
-    # 3. CHECK LOCKDOWN
-    is_virtual_lockdown = (state.get(LOCKDOWN_ENTITY) == "on")
+    # 3. CHECK LOCKDOWN (Physical Only)
     is_physical_lockdown = (LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on")
 
-    if is_virtual_lockdown or is_physical_lockdown:
-        if DEBUG: log.info(f"⛔ DEBUG: LOCKDOWN ACTIVE.")
+    if is_physical_lockdown:
+        if DEBUG: log.info(f"⛔ DEBUG: PHYSICAL LOCKDOWN ACTIVE.")
         
-        # We perform the lockdown actions, but we DO NOT send notifications.
+        # Action: Force Locks Only (No Notifications)
         for door_name, config in data.items():
             if door_name.lower() == "settings": continue
             reset_entity = config.get('reset_entity')
