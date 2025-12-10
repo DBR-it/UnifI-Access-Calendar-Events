@@ -17,17 +17,23 @@ Settings:
   # The script monitors this. If it turns ON (via App or HA), the schedule stops.
   lockdown_switch: switch.all_doors_lockdown_example
 
-  # 3. PERMANENT MEMORY (Required)
+  # 3. GLOBAL MASTER KEYWORD HELPER (Optional)
+  # Create an Input Text helper (e.g., input_text.global_door_keyword).
+  # Whatever text you type into that helper becomes the "Master Key" to unlock ALL doors.
+  # Leave blank to disable the Master Key feature.
+  global_keyword_helper: input_text.global_door_keyword
+
+  # 4. PERMANENT MEMORY (Required)
   # Stores "Last Notification Date" and Conflict Alerts to prevent spam.
   memory_entity: input_text.door_manager_memory
 
-  # 4. NIGHT MODE ("The Bouncer")
+  # 5. NIGHT MODE ("The Bouncer")
   # The system will FORCE LOCK doors between these hours.
   # If a door is unlocked manually during this time, it is re-locked within 60s.
   safe_hour_start: "6 AM"
   safe_hour_end: "11:59 PM"
 
-  # 5. DEBUGGING
+  # 6. DEBUGGING
   # Set to true to see detailed messages in Settings > System > Logs.
   debug_logging: true
 
