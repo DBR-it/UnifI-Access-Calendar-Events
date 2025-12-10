@@ -1,0 +1,7 @@
+{
+  "name": "UniFi Access Door Manager",
+  "render_readme": true,
+  "content_in_root": false,
+  "zip_release": false,
+  "filename": "door_manager_ui.py"
+}
