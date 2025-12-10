@@ -88,40 +88,58 @@ Home Assistant polls cloud calendars roughly every **15 minutes**.
 
 ## 📦 Installation Guide
 
-### Step 1: Install UniFi Access Integration
-1.  Go to **HACS** > Integrations > Explore.
-2.  Search for **UniFi Access** (by specialized-hacs).
-3.  Click **Download** and then **Restart Home Assistant**.
-4.  Go to **Settings > Devices & Services > Add Integration**.
-5.  Search for **UniFi Access** and follow the prompts to log in.
+### Step 1: Install Dependencies
+1.  **Install Pyscript:**
+    * Open HACS > Integrations > Explore > Search "Pyscript" > Download.
+    * Restart Home Assistant.
+    * Go to Settings > Devices & Services > Add Integration > Pyscript.
+    * *Check "Allow all imports" if prompted.*
 
-### Step 2: Install Pyscript
-1.  Go to **HACS** > Integrations > Explore.
-2.  Search for **Pyscript**.
-3.  Click **Download** and then **Restart Home Assistant**.
-4.  Go to **Settings > Devices & Services > Add Integration**.
-5.  Search for **Pyscript** and add it. (*Enable "Allow all imports" if prompted*).
+### Step 2: Install the Door Manager
+1.  **Download the Code:**
+    * Go to the [GitHub Repository](https://github.com/YOUR_USERNAME/YOUR_REPO).
+    * Open the `pyscript/` folder and click `door_manager_ui.py`.
+    * Click the **Copy raw file** button (top right).
+2.  **Paste into Home Assistant:**
+    * Use the **File Editor** add-on in Home Assistant.
+    * Navigate to `/config/pyscript/`.
+    * Create a new file named `door_manager_ui.py`.
+    * Paste the code and Save.
 
-### Step 3: Create Dashboard Helpers
-Go to **Settings > Devices & Services > Helpers** and create the following:
+### Step 3: Configure Settings
+1.  In the same `/config/pyscript/` folder, create a file named `doors.yaml`.
+2.  Copy the content from `doors_example.yaml` in this repo.
+3.  Update the Entity IDs to match your UniFi locks and rules.
 
-| Name | Entity ID (Example) | Type | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Pause Door Schedule** | `input_boolean.pause_door_schedule` | Toggle | Master switch to pause automation. |
-| **Door Keyword** | `input_text.door_keyword` | Text | The keyword to look for in events (e.g., `*`). |
-| **Global Keyword** | `input_text.global_door_keyword` | Text | **(Optional)** The Master Key to open ALL doors. |
-| **Pre-Buffer** | `input_number.front_door_pre_buffer` | Number | Minutes to unlock *before* event. |
-| **Post-Buffer** | `input_number.front_door_post_buffer` | Number | Minutes to keep open *after* event. |
-| **Door Manager Memory** | `input_text.door_manager_memory` | Text | **Required.** Stores conflict alerts & prevents spam. |
+### Step 4: Create Dashboard Helpers
+Go to **Settings > Devices & Services > Helpers** and create these (required):
 
-### Step 4: Install via HACS (Custom Repository)
-1.  Open **HACS** > Integrations.
-2.  Click the **3 Dots** (top right) > **Custom Repositories**.
-3.  **Repository:** Paste the URL of this GitHub repository.
-4.  **Category:** Select **Integration** from the dropdown menu.
-    * *(Note: HACS uses "Integration" for backend logic scripts like this).*
-5.  Click **Add**.
-6.  Find **"UniFi Access Door Manager"** in the list and click **Download**.
+| Name | Entity ID | Type |
+| :--- | :--- | :--- |
+| **Pause Door Schedule** | `input_boolean.pause_door_schedule` | Toggle |
+| **Lockdown Mode** | `input_boolean.lockdown_mode` | Toggle |
+| **Door Keyword** | `input_text.door_keyword` | Text |
+| **Door Manager Memory** | `input_text.door_manager_memory` | Text |
+| **Pre-Buffer** | `input_number.front_door_pre_buffer` | Number |
+| **Post-Buffer** | `input_number.front_door_post_buffer` | Number |
+
+---
+
+## 🔄 Easy Update System (Optional)
+Since this script lives outside HACS, you can create a button to update it automatically.
+
+1.  **Add this to your `configuration.yaml`:**
+    ```yaml
+    shell_command:
+      update_door_manager: "curl -o /config/pyscript/door_manager_ui.py [https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO_NAME/main/pyscript/door_manager_ui.py](https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO_NAME/main/pyscript/door_manager_ui.py)"
+    ```
+2.  **Restart Home Assistant.**
+3.  **Create a Button Card** on your dashboard:
+    * **Action:** Call Service
+    * **Service:** `shell_command.update_door_manager`
+    * **Name:** "Update Door Script"
+
+Now, whenever you push a fix to GitHub, just press that button!
 
 ### Step 5: Add the Status Card
 We have created a "Smart Status" card that shows you if the system is Running, Paused, or in Lockdown.
