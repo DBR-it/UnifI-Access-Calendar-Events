@@ -64,12 +64,19 @@ When you put an event on your Google/Outlook calendar, you simply **include that
     * **Result:** The script sees `D1`, looks up your settings, finds it belongs to **Front Door**, and unlocks it.
 
 ### 3. The Master Key (Unlock EVERYTHING)
-If you configure a `global_unlock_keyword` in your `doors.yaml` (e.g., `ALL`), you can open every single door with one word.
-* **Event Title:** `Company Party ALL`
-    * **Result:** Unlocks **EVERY** door configured in the system.
+You can create a special "Global Keyword" helper (e.g., `input_text.global_door_keyword`).
+* **How it works:** Whatever text you type into this dashboard box becomes the **Master Key**.
+* **Security Benefit:** If you use "ALL" and suspect someone guessed it, just go to your Dashboard and change the text to "Eagle77". The old keyword stops working instantly.
+* **Example:**
+    * **Dashboard Setting:** `ALL`
+    * **Event Title:** `Company Party ALL` -> Unlocks EVERY door.
 
 ### 4. Privacy Protection
 If an event title does **not** contain a matching keyword (e.g., "Dentist Appointment"), the script ignores it completely. The doors stay locked.
+
+---
+
+## ☁️ CRITICAL WARNING: Cloud Calendar Delays
 
 **Please read this if you use Google Calendar or Outlook 365.**
 
@@ -102,6 +109,7 @@ Go to **Settings > Devices & Services > Helpers** and create the following:
 | :--- | :--- | :--- | :--- |
 | **Pause Door Schedule** | `input_boolean.pause_door_schedule` | Toggle | Master switch to pause automation. |
 | **Door Keyword** | `input_text.door_keyword` | Text | The keyword to look for in events (e.g., `*`). |
+| **Global Keyword** | `input_text.global_door_keyword` | Text | **(Optional)** The Master Key to open ALL doors. |
 | **Pre-Buffer** | `input_number.front_door_pre_buffer` | Number | Minutes to unlock *before* event. |
 | **Post-Buffer** | `input_number.front_door_post_buffer` | Number | Minutes to keep open *after* event. |
 | **Door Manager Memory** | `input_text.door_manager_memory` | Text | **Required.** Stores conflict alerts & prevents spam. |
@@ -111,6 +119,7 @@ Go to **Settings > Devices & Services > Helpers** and create the following:
 2.  Click the **3 Dots** (top right) > **Custom Repositories**.
 3.  **Repository:** Paste the URL of this GitHub repository.
 4.  **Category:** Select **Integration** from the dropdown menu.
+    * *(Note: HACS uses "Integration" for backend logic scripts like this).*
 5.  Click **Add**.
 6.  Find **"UniFi Access Door Manager"** in the list and click **Download**.
 
