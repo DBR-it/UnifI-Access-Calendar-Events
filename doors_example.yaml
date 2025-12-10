@@ -1,51 +1,67 @@
 # ==============================================================================
-#  DOOR MANAGER CONFIGURATION
+#  UNI FI ACCESS DOOR MANAGER - CONFIGURATION FILE (EXAMPLE)
+# ==============================================================================
+#  INSTRUCTIONS:
+#  1. Rename this file to 'doors.yaml' inside your /config/pyscript/ folder.
+#  2. Update the Entity IDs below to match your specific Home Assistant devices.
+#  3. Save the file. The Python script will reload changes automatically.
 # ==============================================================================
 
 Settings:
   # 1. MAINTENANCE PAUSE
-  # If ON, the script sleeps (good for manual work).
+  # If ON, the script stops completely. Use this for maintenance/testing.
   pause_entity: input_boolean.pause_door_schedule
 
-  # 2. EMERGENCY LOCKDOWN
-  # If ON, forces ALL doors locked immediately.
-  lockdown_entity: input_boolean.lockdown_mode
+  # 2. PHYSICAL LOCKDOWN SWITCH (Watcher)
+  # The actual "Lock All Doors" switch entity from the UniFi Integration.
+  # The script monitors this. If it turns ON (via App or HA), the schedule stops.
+  lockdown_switch: switch.all_doors_lockdown_example
 
-  # 3. NIGHT MODE ("The Bouncer")
+  # 3. PERMANENT MEMORY (Required)
+  # Stores "Last Notification Date" and Conflict Alerts to prevent spam.
+  memory_entity: input_text.door_manager_memory
+
+  # 4. NIGHT MODE ("The Bouncer")
   # The system will FORCE LOCK doors between these hours.
   # If a door is unlocked manually during this time, it is re-locked within 60s.
   safe_hour_start: "6 AM"
   safe_hour_end: "11:59 PM"
 
-  # 4. DEBUGGING
-  # Set to true to see detailed logs in Settings > System > Logs.
+  # 5. DEBUGGING
+  # Set to true to see detailed messages in Settings > System > Logs.
   debug_logging: true
 
 # ==============================================================================
 #  DOOR LIST
 # ==============================================================================
-# Copy and paste the block below to add more doors.
-# Ensure 'reset_entity' is unique for each door.
+#  To add more doors, copy the entire block between the "START" and "END" lines.
+#  Paste it below and rename "Front Door" to something unique (e.g. "Side Door").
+# ==============================================================================
 
+# vvvvvvvvvvvvvvvvvv  START: COPY FROM HERE  vvvvvvvvvvvvvvvvvv
 Front Door:
-  # 1. HARDWARE ENTITIES (Update these to match your system)
-  entity: lock.door_0664
-  reset_entity: select.door_0664_door_lock_rule # Required for "Keep Unlocked" logic
+  # 1. HARDWARE ENTITIES
+  entity: lock.front_door_example
+  # The "Rule" entity is REQUIRED for the "Keep Unlocked" logic to work.
+  reset_entity: select.front_door_rule_example
 
   # 2. SCHEDULE
-  calendar: calendar.ha
+  # The calendar entity that contains events for this door.
+  calendar: calendar.example_calendar
 
-  # 3. NOTIFICATIONS (Optional)
+  # 3. NOTIFICATIONS (Per Door)
   # Enter your service here (e.g., notify.mobile_app_iphone).
-  # Leave BLANK to disable all notifications.
-  notification_service: notify.mobile_app_iphone_17
+  # You can send different doors to different phones if needed.
+  notification_service: notify.mobile_app_example
 
   # NOTIFICATION STYLE:
   # 'all'     = Notify on every single unlock/lock event.
   # 'summary' = Notify ONLY on first unlock of the day + Night Mode lock confirmation.
   notify_type: summary
 
-  # 4. DASHBOARD HELPERS
+  # 4. DASHBOARD HELPERS (Knobs & Settings)
+  # These allow you to adjust settings from the Dashboard without editing code.
   keyword_helper: input_text.door_keyword
   pre_helper: input_number.front_door_pre_buffer
   post_helper: input_number.front_door_post_buffer
+# ^^^^^^^^^^^^^^^^^^   END: COPY UNTIL HERE   ^^^^^^^^^^^^^^^^^^
