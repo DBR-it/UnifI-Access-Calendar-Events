@@ -1,24 +1,15 @@
-# ==============================================================================
-#  DASHBOARD CARD CODE
-# ==============================================================================
-#  1. Ensure you have "Mushroom Cards" installed from HACS.
-#  2. Go to your Dashboard -> Edit -> Add Card -> Manual.
-#  3. Paste the code below.
-#  4. Update the entity IDs to match your system.
-# ==============================================================================
-
 type: custom:mushroom-template-card
 primary: >
   {% if is_state('switch.all_doors_lockdown', 'on') %}
-    GLOBAL LOCKDOWN
+    ⛔ GLOBAL LOCKDOWN
   {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
-    SYSTEM PAUSED
+    ⏸️ SYSTEM PAUSED
   {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
-    DOOR LOCKDOWN
+    🔒 DOOR OVERRIDE
   {% elif is_state('lock.door_0664', 'unlocked') %}
-    SCHEDULE ACTIVE
+    🔓 UNLOCKED BY SCHEDULE
   {% else %}
-    SYSTEM READY
+    ✅ SYSTEM READY
   {% endif %}
 secondary: >
   {% if is_state('switch.all_doors_lockdown', 'on') %}
@@ -26,9 +17,9 @@ secondary: >
   {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
     Maintenance Mode
   {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
-    Manual Override
+    Manual Override Active
   {% elif is_state('lock.door_0664', 'unlocked') %}
-    Door Unlocked by Calendar
+    Schedule Active
   {% else %}
     Waiting for Next Event...
   {% endif %}
@@ -42,13 +33,13 @@ icon: >
   {% elif is_state('lock.door_0664', 'unlocked') %}
     mdi:door-open
   {% else %}
-    mdi:calendar-check
+    mdi:shield-check
   {% endif %}
 icon_color: >
   {% if is_state('switch.all_doors_lockdown', 'on') %}
     red
   {% elif is_state('input_boolean.pause_door_schedule', 'on') %}
-    blue
+    amber
   {% elif states('select.door_0664_door_lock_rule') in ['keep_lock', 'keep_locked'] %}
     deep-orange
   {% elif is_state('lock.door_0664', 'unlocked') %}
@@ -57,10 +48,5 @@ icon_color: >
     green
   {% endif %}
 layout: horizontal
-multiline_secondary: false
 tap_action:
-  action: none
-hold_action:
-  action: none
-double_tap_action:
   action: none
