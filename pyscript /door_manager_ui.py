@@ -1,7 +1,12 @@
 # door_manager_ui.py
-# MASTER VERSION: Fixed Keep Unlocked + Manual Override + Smart Summary Notifications
+# MASTER VERSION: Fixed Import Scoping + Persistent Memory + Dual Lockdown + CONFLICT ALERTS + COMPRESSED MEMORY
+# REMOVED: Redundant Emergency Notifications (Handled by UniFi)
 
-# GLOBAL MEMORY: Tracks the last date we sent alerts to avoid spam
+import json
+import os
+from datetime import datetime, timedelta
+
+# GLOBAL MEMORY
 if "last_unlock_tracker" not in locals():
     last_unlock_tracker = {}
 if "last_nightly_report" not in locals():
@@ -30,9 +35,6 @@ def parse_time(value):
 
 @service
 def check_door_schedule():
-    import os
-    from datetime import datetime, timedelta
-
     CONFIG_FILE = "/config/pyscript/doors.yaml"
 
     # 1. READ CONFIG
@@ -47,21 +49,69 @@ def check_door_schedule():
 
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
     LOCKDOWN_ENTITY = settings.get("lockdown_entity", "input_boolean.lockdown_mode")
+    LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
+    MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
     DEBUG = settings.get("debug_logging", False)
     
     start_raw = settings.get("safe_hour_start", "6 AM")
-    end_raw = settings.get("safe_hour_end", "10 PM")
+    end_raw = settings.get("safe_hour_end", "11:59 PM")
     SAFE_HOUR_START = parse_time(start_raw)
     SAFE_HOUR_END = parse_time(end_raw)
 
+    # LOAD MEMORY
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    memory_data = {}
+    memory_changed = False 
+    
+    try:
+        raw_mem = state.get(MEMORY_ENTITY)
+        if raw_mem and raw_mem not in ["unknown", "unavailable", ""]:
+            memory_data = json.loads(raw_mem)
+    except Exception as e:
+        if DEBUG: log.warning(f"Memory Load Error: {e}")
+        memory_data = {}
+
+    def save_memory():
+        try:
+            # Clean up old dates
+            clean_data = {k: v for k, v in memory_data.items() if v == today_str}
+            
+            # --- COMPRESSION CHECK ---
+            # If data is getting too big (>240 chars), aggressively remove old conflict keys
+            json_str = json.dumps(clean_data)
+            if len(json_str) > 240:
+                if DEBUG: log.warning("Memory near limit. Purging old warnings to save space.")
+                # Keep only core flags (Front Door, nightly) and dump conflicts
+                clean_data = {k: v for k, v in clean_data.items() if not k.startswith("c_")}
+                json_str = json.dumps(clean_data)
+            
+            service.call("input_text", "set_value", entity_id=MEMORY_ENTITY, value=json_str)
+        except Exception as e:
+            if DEBUG: log.warning(f"Failed to save memory: {e}")
+
+    # Helper to collect all notification services
+    unique_notify_services = set()
+    for d, c in data.items():
+        if d == "Settings": continue
+        s = c.get("notification_service")
+        if s: unique_notify_services.add(s)
+
     # 3. CHECK LOCKDOWN
-    if state.get(LOCKDOWN_ENTITY) == "on":
-        if DEBUG: log.info("⛔ DEBUG: LOCKDOWN ACTIVE.")
+    is_virtual_lockdown = (state.get(LOCKDOWN_ENTITY) == "on")
+    is_physical_lockdown = (LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on")
+
+    if is_virtual_lockdown or is_physical_lockdown:
+        if DEBUG: log.info(f"⛔ DEBUG: LOCKDOWN ACTIVE.")
+        
+        # We perform the lockdown actions, but we DO NOT send notifications.
         for door_name, config in data.items():
             if door_name.lower() == "settings": continue
             reset_entity = config.get('reset_entity')
             lock_entity = config.get('entity')
-            if reset_entity: select.select_option(entity_id=reset_entity, option="reset")
+            
+            if reset_entity: 
+                select.select_option(entity_id=reset_entity, option="keep_lock")
             if lock_entity and state.get(lock_entity) == "unlocked":
                 lock.lock(entity_id=lock_entity)
         return
@@ -71,31 +121,16 @@ def check_door_schedule():
         if DEBUG: log.info("⏸️ DEBUG: System PAUSED.")
         return
 
-    # 5. CHECK NIGHT MODE (The Bouncer & Nightly Report)
-    now = datetime.now()
-    today_str = now.strftime("%Y-%m-%d")
-    
+    # 5. CHECK NIGHT MODE
     if now.hour < SAFE_HOUR_START or now.hour > SAFE_HOUR_END:
         if DEBUG: log.info(f"🌙 Night Mode Active (Hour: {now.hour}). Enforcing Locks.")
         
-        # We collect services to send the "All Clear" message to
-        unique_notify_services = set()
-        
         for door_name, config in data.items():
             if door_name.lower() == "settings": continue
-
+            
             reset_entity = config.get('reset_entity')
             lock_entity = config.get('entity')
-            notify_service = config.get('notification_service')
             
-            if notify_service:
-                unique_notify_services.add(notify_service)
-
-            # Reset the "Morning Tracker" so it's ready for tomorrow
-            if door_name in last_unlock_tracker and last_unlock_tracker[door_name] != today_str:
-                pass 
-
-            # Force Lock Logic
             if reset_entity and state.get(reset_entity) == "keep_unlock":
                 if DEBUG: log.info(f"   Night Mode: Resetting rule for {door_name}")
                 select.select_option(entity_id=reset_entity, option="reset")
@@ -104,22 +139,22 @@ def check_door_schedule():
                 if DEBUG: log.info(f"   Night Mode: Force Locking {door_name}")
                 lock.lock(entity_id=lock_entity)
 
-        # SEND NIGHTLY SUMMARY (Only once per night)
-        # We check a global key "summary_sent" to ensure we only send it once per date
-        if "summary_sent" not in last_nightly_report or last_nightly_report["summary_sent"] != today_str:
+        # SEND NIGHTLY SUMMARY
+        if memory_data.get("nightly_report") != today_str:
             for service_str in unique_notify_services:
                 try:
                     domain, service_name = service_str.split('.', 1)
                     service.call(domain, service_name, message=f"🌙 Night Mode Active: All Doors Confirmed Locked.")
-                except:
-                    pass
-            # Mark as sent for today
-            last_nightly_report["summary_sent"] = today_str
+                except: pass
+            
+            memory_data["nightly_report"] = today_str
+            memory_changed = True
             log.info("🌙 Nightly Summary Notification Sent.")
             
+        if memory_changed: save_memory()
         return 
 
-    # 6. CHECK DOORS (Daytime Logic)
+    # 6. CHECK DOORS
     for door_name, config in data.items():
         if door_name.lower() == "settings": continue
 
@@ -129,7 +164,6 @@ def check_door_schedule():
             if reset_entity:
                 current_rule = state.get(reset_entity)
                 if current_rule == "keep_lock" or current_rule == "keep_locked":
-                    if DEBUG: log.info(f"⛔ {door_name} is manually set to 'Keep Locked'. Skipping.")
                     continue 
 
             try:
@@ -154,8 +188,17 @@ def check_door_schedule():
             
             should_be_open = False
             matched_title = ""
-
-            if DEBUG: log.info(f"🔍 Checking {door_name}: Found {len(event_list)} events")
+            
+            notify_service = config.get('notification_service')
+            notify_type = config.get('notify_type', 'all') 
+            
+            def send_alert(msg, force=False):
+                if not notify_service: return
+                if notify_type == 'summary' and not force: return
+                try:
+                    domain, service_name = notify_service.split('.', 1)
+                    service.call(domain, service_name, message=msg)
+                except: pass
 
             for event in event_list:
                 title = event.get("summary", "").lower()
@@ -164,6 +207,29 @@ def check_door_schedule():
 
                 start_time = datetime.fromisoformat(event["start"])
                 end_time = datetime.fromisoformat(event["end"])
+                
+                # --- CONFLICT DETECTOR ---
+                conflict_msg = None
+                s_hour = start_time.hour
+                e_hour = end_time.hour
+                
+                if s_hour < SAFE_HOUR_START:
+                    conflict_msg = f"⚠️ Schedule Conflict: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')}. Night Mode ends at {start_raw}."
+                elif e_hour > SAFE_HOUR_END:
+                    conflict_msg = f"⚠️ Schedule Conflict: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')}. Night Mode locks doors at {end_raw}."
+
+                if conflict_msg:
+                    # COMPRESSED KEY: c_DAYHOUR_First5CharsOfTitle
+                    short_title = title[:5].replace(" ", "")
+                    c_id = f"c_{start_time.strftime('%d%H')}_{short_title}"
+                    
+                    if memory_data.get(c_id) != today_str:
+                        send_alert(f"{door_name}: {conflict_msg}", force=True)
+                        memory_data[c_id] = today_str
+                        memory_changed = True
+                        log.warning(f"Conflict Detected: {conflict_msg}")
+                # -----------------------------
+
                 effective_start = start_time - timedelta(minutes=pre_min)
                 effective_end = end_time + timedelta(minutes=post_min)
                 
@@ -176,26 +242,17 @@ def check_door_schedule():
             #  EXECUTION LOGIC
             # ==========================================================
             lock_entity = config['entity']
-            notify_service = config.get('notification_service')
-            notify_type = config.get('notify_type', 'all') 
             
             current_lock_state = state.get(lock_entity)
             current_rule_state = state.get(reset_entity) if reset_entity else None
 
-            def send_alert(msg, force=False):
-                if not notify_service: return
-                if notify_type == 'summary' and not force: return
-                try:
-                    domain, service_name = notify_service.split('.', 1)
-                    service.call(domain, service_name, message=msg)
-                except: pass
-
             if should_be_open:
-                # Logic: Is this the FIRST unlock of the day?
+                # Persistence Check
                 is_first_unlock = False
-                if door_name not in last_unlock_tracker or last_unlock_tracker[door_name] != today_str:
+                if memory_data.get(door_name) != today_str:
                     is_first_unlock = True
-                    last_unlock_tracker[door_name] = today_str 
+                    memory_data[door_name] = today_str 
+                    memory_changed = True
 
                 if reset_entity:
                     if current_rule_state != "keep_unlock":
@@ -234,6 +291,9 @@ def check_door_schedule():
                     
         except Exception as e:
             log.error(f"Error processing {door_name}: {e}")
+            
+    if memory_changed:
+        save_memory()
 
 @time_trigger("cron(* * * * *)")
 def run_every_minute():
