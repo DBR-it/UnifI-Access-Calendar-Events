@@ -1,5 +1,5 @@
 # door_manager_ui.py
-# MASTER VERSION: Conflict Alerts + Memory Compression + UniFi-Only Lockdown
+# MASTER VERSION: Conflict Alerts + Memory Compression + UniFi-Only Lockdown (Physical Switch + Individual Rules)
 
 import json
 import os
@@ -47,7 +47,7 @@ def check_door_schedule():
     if not settings: settings = data.pop("settings", {})
 
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
-    # REMOVED: Virtual Lockdown Entity
+    # This is the 'Watcher' for the global UniFi switch
     LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
     MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
     DEBUG = settings.get("debug_logging", False)
@@ -93,18 +93,19 @@ def check_door_schedule():
         s = c.get("notification_service")
         if s: unique_notify_services.add(s)
 
-    # 3. CHECK LOCKDOWN (Physical Only)
+    # 3. CHECK GLOBAL LOCKDOWN (Physical Switch Only)
     is_physical_lockdown = (LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on")
 
     if is_physical_lockdown:
-        if DEBUG: log.info(f"⛔ DEBUG: PHYSICAL LOCKDOWN ACTIVE.")
+        if DEBUG: log.info(f"⛔ DEBUG: PHYSICAL LOCKDOWN ACTIVE (Master Switch).")
         
-        # Action: Force Locks Only (No Notifications)
+        # Action: Force Locks Only (No Notifications - UniFi handles that)
         for door_name, config in data.items():
             if door_name.lower() == "settings": continue
             reset_entity = config.get('reset_entity')
             lock_entity = config.get('entity')
             
+            # We enforce the lock, but we don't change the rule permanently unless needed
             if reset_entity: 
                 select.select_option(entity_id=reset_entity, option="keep_lock")
             if lock_entity and state.get(lock_entity) == "unlocked":
@@ -154,11 +155,13 @@ def check_door_schedule():
         if door_name.lower() == "settings": continue
 
         try:
-            # Manual Override Check
+            # --- INDIVIDUAL LOCKDOWN CHECK ---
+            # If THIS specific door is manually set to "keep_lock", we skip it.
             reset_entity = config.get('reset_entity')
             if reset_entity:
                 current_rule = state.get(reset_entity)
                 if current_rule == "keep_lock" or current_rule == "keep_locked":
+                    if DEBUG: log.info(f"⛔ Skipping {door_name} (Manual Override Active)")
                     continue 
 
             try:
