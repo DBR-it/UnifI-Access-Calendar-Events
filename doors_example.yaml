@@ -35,10 +35,16 @@ Settings:
   memory_entity: input_text.door_manager_memory
 
   # NIGHT MODE (THE BOUNCER)
-  # Controls the "Safe Hours" when doors can unlock.
-  # Can be hardcoded (e.g., "6 AM") OR point to dashboard helpers (Time).
-  safe_hour_start: input_datetime.night_mode_start
-  safe_hour_end: input_datetime.night_mode_end
+  # night_mode_start: When does the building CLOSE? (Lockdown Begins)
+  # night_mode_end:   When does the building OPEN?  (Lockdown Ends)
+  
+  # OPTION A: Use Dashboard Helpers (Flexible)
+  # night_mode_start: input_datetime.night_mode_start
+  # night_mode_end: input_datetime.night_mode_end
+
+  # OPTION B: Hardcoded Text (Simple)
+  night_mode_start: "11:00 PM"
+  night_mode_end: "6:00 AM"
 
   # [OPTIONAL] DEBUGGING
   # Set to true to see detailed logs in Settings > System > Logs.
