@@ -5,13 +5,25 @@
 # 🔐 UniFi Access Door Manager (for Home Assistant)
 
 **Automate your commercial or residential locks using Google/Outlook Calendars.**
+
 This Pyscript automation links your calendar events to your smart locks (UniFi Access, August, Schlage, etc.) with professional features like "Night Mode" security, pre-meeting buffers, and a live dashboard interface.
+
+---
+
+## ⚠️ Disclaimer
+**USE AT YOUR OWN RISK.**
+This software controls physical access to your building. While every effort has been made to ensure safety and reliability (including "Night Mode" fail-safes), the authors are not liable for:
+* Doors failing to lock or unlock due to power outages, network failures, or software bugs.
+* Unauthorized access or security breaches.
+* Anyone getting locked out of the building.
+
+**Always carry a physical key or have a backup entry method.**
 
 ---
 
 ## ✨ Features
 * **📅 Calendar Sync:** Unlocks doors automatically based on calendar events.
-* **🛡️ Night Mode ("The Bouncer"):** strictly forces doors locked during specific hours (e.g., 11 PM - 6 AM), even if a calendar event is scheduled.
+* **🛡️ Night Mode ("The Bouncer"):** Strictly forces doors locked during specific hours (e.g., 11 PM - 6 AM), even if a calendar event is scheduled.
 * **🚦 Conflict Alerts:** Detects and warns you if a scheduled event violates Night Mode rules (sends Phone Notification + Dashboard Alert).
 * **⏳ Smart Buffers:** Open doors *before* the event starts (Pre-Buffer) and keep them open *after* (Post-Buffer).
 * **📱 Dashboard Control:** Adjust buffers, change Night Mode hours, and view lock status directly from the Lovelace dashboard.
@@ -21,25 +33,34 @@ This Pyscript automation links your calendar events to your smart locks (UniFi A
 ---
 
 ## 🛠️ Prerequisites
-1.  **Home Assistant** (Core or OS)
-2.  **HACS** (Home Assistant Community Store)
-3.  **Pyscript** (Install via HACS > Integrations)
-4.  **Mushroom Cards** (Install via HACS > Frontend) - *Recommended for the dashboard.*
+You need these installed in Home Assistant before you begin:
+
+1.  **UniFi Access Integration** (via HACS)
+    * *Required to expose your UniFi Readers/Locks to Home Assistant.*
+2.  **Pyscript** (via HACS > Integrations)
+    * *Runs the Python logic engine.*
+3.  **Google Calendar** or **Local Calendar** (Home Assistant Core)
+    * *Source of your schedule events.*
+4.  **Mushroom Cards** (via HACS > Frontend)
+    * *Required for the beautiful dashboard cards.*
+5.  **Card Mod** (via HACS > Frontend)
+    * *(Optional)* *Used to highlight the "Selected Door" in Blue on the dashboard.*
 
 ---
 
 ## ⚙️ Installation
 
-### 1. Install Pyscript
-Go to HACS > Integrations > Search "Pyscript" > Install > Restart Home Assistant.
+### 1. Install Integrations
+Go to **HACS**, install the prerequisites listed above, and **Restart Home Assistant**.
 
 ### 2. Create Required Helpers (Crucial!)
-You must create these helpers in **Settings > Devices & Services > Helpers** for the script and dashboard to work.
+You must create these manually in **Settings > Devices & Services > Helpers**.
+*Note: The script will not run without these.*
 
 | Name | Entity ID | Type | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Door Alerts** | `input_text.door_alerts` | Text | Displays conflict warnings on the dashboard. |
-| **Selected Door** | `input_select.selected_door` | Dropdown | Selects which door to edit on the dashboard. Add your doors as options (e.g., "Front Door"). |
+| **Selected Door** | `input_select.selected_door` | Dropdown | Selects which door to edit on the dashboard. **Add your door names as options** (e.g., "Front Door"). |
 | **Door Memory** | `input_text.door_manager_memory` | Text | Internal memory to prevent notification spam. |
 | **Pause Schedule** | `input_boolean.pause_door_schedule` | Toggle | Master switch to pause all automation. |
 | **Show Door List**| `input_boolean.show_door_list` | Toggle | Used for the collapsible list on the dashboard. |
@@ -54,20 +75,19 @@ You must create these helpers in **Settings > Devices & Services > Helpers** for
 4.  Upload `doors.yaml` to `/config/pyscript/`.
 
 ### 4. Configure Your Doors
-Open `/config/pyscript/doors.yaml` and configure your locks. You can use **Hybrid Configuration** (Hardcoded values OR Dashboard Helpers).
+Open `/config/pyscript/doors.yaml` and configure your locks.
 
 **Example `doors.yaml`:**
 ```yaml
 Settings:
   pause_entity: input_boolean.pause_door_schedule
-  # Points to the Dashboard Time Helpers we created above
   night_mode_start: input_datetime.night_mode_start
   night_mode_end: input_datetime.night_mode_end
 
 Defaults:
   pre_buffer: 15
   post_buffer: 15
-  notification_service: notify.mobile_app_your_phone
+  notification_service: notify.mobile_app_iphone
 
 Front Door:
   entity: lock.front_door
