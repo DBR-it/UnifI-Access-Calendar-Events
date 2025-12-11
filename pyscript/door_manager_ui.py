@@ -1,6 +1,6 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.6.0
-# FEATURES: 12-Hour Time Format + Dashboard Night Mode + Hybrid Keywords
+# MASTER VERSION: v1.7.0
+# FEATURES: Renamed Night Mode Settings + 12-Hour Time Format + Hybrid Keywords
 
 import json
 import os
@@ -103,11 +103,16 @@ def check_door_schedule():
 
     DEBUG = settings.get("debug_logging", False)
     
-    # NIGHT MODE
-    start_raw = settings.get("safe_hour_start", "6 AM")
-    end_raw = settings.get("safe_hour_end", "11:59 PM")
-    SAFE_HOUR_START = parse_time(start_raw)
-    SAFE_HOUR_END = parse_time(end_raw)
+    # NIGHT MODE LOGIC (UPDATED NAMES)
+    # night_mode_start = When lockdown BEGINS (e.g. 11 PM) -> This is the "End of Safe Hours"
+    # night_mode_end   = When lockdown STOPS (e.g. 6 AM)  -> This is the "Start of Safe Hours"
+    
+    nm_start_raw = settings.get("night_mode_start", "11:59 PM")
+    nm_end_raw = settings.get("night_mode_end", "6 AM")
+    
+    # Map to internal logic (Safe Hours)
+    SAFE_HOUR_END = parse_time(nm_start_raw)   # Lock up at 11 PM
+    SAFE_HOUR_START = parse_time(nm_end_raw)   # Open up at 6 AM
 
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -131,6 +136,8 @@ def check_door_schedule():
 
     if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on": return
     if state.get(PAUSE_ENTITY) == "on": return
+    
+    # Clear alerts when Night Mode Ends (Morning)
     if now.hour == SAFE_HOUR_START and now.minute == 0:
          service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value="")
 
@@ -182,7 +189,7 @@ def check_door_schedule():
                 s_hour = start_time.hour
                 e_hour = end_time.hour
                 
-                # --- UPDATED CONFLICT MESSAGES (12-HOUR FORMAT) ---
+                # --- UPDATED CONFLICT MESSAGES (12-Hour Format) ---
                 if s_hour < SAFE_HOUR_START:
                     conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')} (Night Mode)."
                 elif e_hour > SAFE_HOUR_END:
