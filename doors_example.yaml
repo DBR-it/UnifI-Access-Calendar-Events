@@ -1,120 +1,107 @@
 # ==============================================================================
-#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION TEMPLATE
+#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION
 # ==============================================================================
 #  INSTRUCTIONS:
-#  1. Rename this file from 'doors_example.yaml' to 'doors.yaml'.
-#  2. Update the 'Settings' section with your specific Helper Entity IDs.
-#  3. Update the 'Doors' section with your actual Lock and Calendar entities.
-#  4. Restart Home Assistant or Reload Pyscript to apply changes.
+#  1. Place this file in /config/pyscript/
+#  2. Rename it to 'doors.yaml'.
+#  3. Update the entities below to match your Home Assistant setup.
+#  4. Restart Home Assistant to apply changes.
 # ==============================================================================
 
 Settings:
   # [REQUIRED] MASTER PAUSE TOGGLE
-  # Create an Input Boolean (Toggle) helper in Home Assistant.
-  # What it does: If you turn this ON, the entire automation stops running.
-  # Use case: Turn this on during holidays or door maintenance to stop auto-unlocking.
+  # Turn ON to stop the automation (Maintenance/Holiday).
   pause_entity: input_boolean.pause_door_schedule
 
   # [OPTIONAL] PHYSICAL LOCKDOWN SWITCH
-  # The Entity ID of a physical switch or a virtual toggle.
-  # What it does: If this switch turns ON, the system ignores the calendar and 
-  # aggressively locks all doors. Useful for security emergencies.
+  # Turn ON to immediately lock all doors and ignore schedule.
   lockdown_switch: switch.all_doors_lockdown
 
   # [OPTIONAL] GLOBAL MASTER KEY
-  # Create an Input Text helper.
-  # What it does: Any text you type here becomes a "Master Password".
-  # If a calendar event title contains this text, ALL doors will unlock.
-  # Example: Type "ALL" in the helper -> Event "Town Hall ALL" unlocks everything.
+  # If an event title contains this text, ALL doors unlock.
+  # Option A: Use a Helper (Flexible)
   global_keyword_helper: input_text.global_door_keyword
+  # Option B: Hardcoded Text (Simple) - Uncomment to use
+  # global_keyword_helper: "ALL"
 
   # [REQUIRED] SYSTEM MEMORY
-  # Create an Input Text helper.
-  # What it does: The script writes temporary data here (like "Last Notification Sent")
-  # to prevent spamming your phone and to remember state across reboots.
+  # Stores state to prevent notification spam.
   memory_entity: input_text.door_manager_memory
 
   # NIGHT MODE (THE BOUNCER)
-  # night_mode_start: When does the building CLOSE? (Lockdown Begins)
-  # night_mode_end:   When does the building OPEN?  (Lockdown Ends)
+  # When does the building CLOSE (Lockdown Start) and OPEN (Lockdown End)?
   
-  # OPTION A: Use Dashboard Helpers (Flexible)
+  # OPTION A: Use Dashboard Helpers (Adjustable from Phone)
   # night_mode_start: input_datetime.night_mode_start
   # night_mode_end: input_datetime.night_mode_end
 
-  # OPTION B: Hardcoded Text (Simple)
+  # OPTION B: Hardcoded Text (Set and Forget)
   night_mode_start: "11:00 PM"
   night_mode_end: "6:00 AM"
 
   # [OPTIONAL] DEBUGGING
-  # Set to true to see detailed logs in Settings > System > Logs.
+  # Set to true to see logs in Settings > System > Logs.
   debug_logging: true
 
 # ==============================================================================
 #  DEFAULTS (Global Rules)
 # ==============================================================================
-#  These settings apply to EVERY door unless you specifically override them 
-#  in the door's own config block. This saves you from copy-pasting the same 
-#  settings 50 times.
+#  These settings apply to ALL doors unless specifically overridden below.
 # ==============================================================================
 Defaults:
-  # BUFFER TIMES (Minutes)
-  # Pre: How many minutes BEFORE the calendar event starts should the door unlock?
-  # Post: How many minutes AFTER the event ends should the door stay unlocked?
+  # Default Buffers (Minutes)
+  # Pre: Unlock BEFORE event. Post: Lock AFTER event.
   pre_buffer: 15
   post_buffer: 15
   
-  # NOTIFICATION SERVICE
-  # The service to use for alerts (e.g., notify.mobile_app_iphone).
-  # If you set this here, all doors will alert this phone by default.
+  # Default Notification Service
+  # The phone that gets the alerts (e.g., notify.mobile_app_iphone).
   notification_service: notify.mobile_app_your_phone
 
 # ==============================================================================
 #  DOOR CONFIGURATION
 # ==============================================================================
-#  Copy and paste the examples below to add your doors.
-#  The top-level name (e.g., "Front Door:") must be unique.
-# ==============================================================================
 
-# EXAMPLE 1: THE "SMART" DOOR (Recommended)
-# This setup uses Dashboard Helpers so you can adjust settings (like buffers)
-# directly from your phone without editing this YAML file later.
+# EXAMPLE 1: THE "HYBRID" DOOR (Most Common)
+# Uses Dashboard Helpers for settings you change often, but keeps the rest simple.
 Front Door:
-  # The physical lock entity (e.g., from UniFi, August, Schlage, etc.)
   entity: lock.front_door
-  # The "Rule" or "Reset" entity. Required for "Keep Unlocked" functionality.
   reset_entity: select.front_door_lock_rule
-  # The calendar that controls this door.
   calendar: calendar.office_schedule
   
-  # KEYWORD: The "Secret Code" to look for in event titles.
-  # Can be a hardcoded string (e.g., keyword: "D1") OR a helper entity.
+  # KEYWORD CONFIGURATION (Choose One)
+  # Option A: Dashboard Helper
   keyword_helper: input_text.door_keyword
+  # Option B: Hardcoded Text
+  # keyword: "D1"
   
-  # BUFFERS: Pointing these to input_numbers allows adjustment from the Dashboard.
+  # BUFFER CONFIGURATION (Choose One)
+  # Option A: Dashboard Sliders
   pre_buffer: input_number.front_door_pre_buffer
   post_buffer: input_number.front_door_post_buffer
+  # Option B: Hardcoded Minutes
+  # pre_buffer: 15
+  # post_buffer: 15
   
-  # NOTIFICATIONS: 
-  # 'summary' = Only notify on the first unlock of the day.
-  # 'all' = Notify on every lock/unlock action.
+  # NOTIFICATIONS: 'summary' (once per day) or 'all' (every unlock)
   notify_type: summary
 
 
 # EXAMPLE 2: THE "SIMPLE" DOOR (Hardcoded)
-# This setup is faster. You set the values here once, and they never change.
-# It uses the 'Defaults' from above for buffers (15/15), so we don't need to type them.
+# No helpers needed. Just set the values here and forget it.
 # ------------------------------------------------------------------------------
 # Warehouse:
 #   entity: lock.warehouse_door
 #   reset_entity: select.warehouse_rule
 #   calendar: calendar.warehouse_schedule
-#   keyword: "WH"  # <--- Simple text keyword. Event title: "Delivery WH"
+#   keyword: "WH"         # Hardcoded keyword
+#   # Buffers use Defaults (15/15) unless you add them here:
+#   # pre_buffer: 30
+#   # post_buffer: 30
 
 
 # EXAMPLE 3: THE "STRICT" DOOR (Zero Buffer)
-# Useful for Server Rooms or Labs where access must be exact.
-# We override the defaults by setting buffers to 0.
+# Overrides defaults for exact timing.
 # ------------------------------------------------------------------------------
 # Server Room:
 #   entity: lock.server_room
@@ -123,5 +110,4 @@ Front Door:
 #   keyword: "SERVER"
 #   pre_buffer: 0
 #   post_buffer: 0
-#   # Override the default phone; alert the IT Admin instead.
 #   notification_service: notify.it_admin_phone
