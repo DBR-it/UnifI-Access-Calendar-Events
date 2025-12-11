@@ -1,13 +1,12 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.7.0
-# FEATURES: Renamed Night Mode Settings + 12-Hour Time Format + Hybrid Keywords
+# MASTER VERSION: v1.11.1
+# FIX: Timezone Aware Comparison (Fixes "offset-naive" error)
 
 import json
 import os
 import sys
 from datetime import datetime, timedelta
 
-# GLOBAL MEMORY
 if "last_unlock_tracker" not in locals():
     last_unlock_tracker = {}
 
@@ -24,13 +23,9 @@ def parse_time(value):
     try:
         if isinstance(value, int): return value
         from datetime import datetime
-        
-        # Handle input_datetime entities (HH:MM:SS)
         val_str = str(value).strip()
         if "." in val_str and state.get(val_str) not in ["unknown", "unavailable", None]:
             val_str = state.get(val_str)
-        
-        # Try parsing standard formats
         if ":" in val_str:
             try: return datetime.strptime(val_str, "%H:%M:%S").hour
             except: pass
@@ -38,13 +33,11 @@ def parse_time(value):
             except: pass
             try: return datetime.strptime(val_str, "%H:%M").hour
             except: pass
-            
         if "AM" in val_str.upper() or "PM" in val_str.upper():
              return datetime.strptime(val_str.upper(), "%I %p").hour
         return int(float(val_str))
     except: return 0 
 
-# SMART CONFIG GETTER
 def get_config_value(val, default_val=0):
     if val is None: return float(default_val)
     if isinstance(val, (int, float)): return float(val)
@@ -55,7 +48,6 @@ def get_config_value(val, default_val=0):
     try: return float(val_str)
     except: return float(default_val)
 
-# SMART STRING GETTER
 def get_string_value(val):
     if not val: return ""
     val_str = str(val).strip()
@@ -68,17 +60,13 @@ def get_string_value(val):
 @service
 def check_door_schedule():
     CONFIG_FILE = "/config/pyscript/doors.yaml"
-
-    # 1. READ CONFIG
     data = task.executor(read_config_file, CONFIG_FILE)
     if data is None:
         log.error(f"Door Manager: Could not read {CONFIG_FILE}.")
         return
 
-    # 2. EXTRACT SETTINGS
     settings = data.pop("Settings", {})
     if not settings: settings = data.pop("settings", {})
-    
     defaults = data.pop("Defaults", {})
     if not defaults: defaults = data.pop("defaults", {})
 
@@ -87,7 +75,6 @@ def check_door_schedule():
     MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
     ALERT_ENTITY = "input_text.door_alerts" 
     
-    # DEFAULTS
     DEF_PRE = defaults.get("pre_buffer", 15)
     DEF_POST = defaults.get("post_buffer", 15)
     DEF_NOTIFY = defaults.get("notification_service", None)
@@ -103,16 +90,10 @@ def check_door_schedule():
 
     DEBUG = settings.get("debug_logging", False)
     
-    # NIGHT MODE LOGIC (UPDATED NAMES)
-    # night_mode_start = When lockdown BEGINS (e.g. 11 PM) -> This is the "End of Safe Hours"
-    # night_mode_end   = When lockdown STOPS (e.g. 6 AM)  -> This is the "Start of Safe Hours"
-    
     nm_start_raw = settings.get("night_mode_start", "11:59 PM")
     nm_end_raw = settings.get("night_mode_end", "6 AM")
-    
-    # Map to internal logic (Safe Hours)
-    SAFE_HOUR_END = parse_time(nm_start_raw)   # Lock up at 11 PM
-    SAFE_HOUR_START = parse_time(nm_end_raw)   # Open up at 6 AM
+    SAFE_HOUR_END = parse_time(nm_start_raw)
+    SAFE_HOUR_START = parse_time(nm_end_raw)
 
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -124,7 +105,6 @@ def check_door_schedule():
         if raw_mem and raw_mem not in ["unknown", "unavailable", ""]:
             memory_data = json.loads(raw_mem)
     except Exception as e:
-        if DEBUG: log.warning(f"Memory Load Error: {e}")
         memory_data = {}
 
     def save_memory():
@@ -136,10 +116,8 @@ def check_door_schedule():
 
     if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on": return
     if state.get(PAUSE_ENTITY) == "on": return
-    
-    # Clear alerts when Night Mode Ends (Morning)
-    if now.hour == SAFE_HOUR_START and now.minute == 0:
-         service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value="")
+
+    ANY_CONFLICT_FOUND = False
 
     for door_name, config in data.items():
         if door_name.lower() == "settings": continue
@@ -185,27 +163,36 @@ def check_door_schedule():
                 start_time = datetime.fromisoformat(event["start"])
                 end_time = datetime.fromisoformat(event["end"])
                 
-                conflict_msg = None
-                s_hour = start_time.hour
-                e_hour = end_time.hour
+                # =========================================================
+                #  FIXED CONFLICT CHECKER (Timezone Aware)
+                #  We must convert 'now' to the event's timezone before comparing.
+                # =========================================================
                 
-                # --- UPDATED CONFLICT MESSAGES (12-Hour Format) ---
-                if s_hour < SAFE_HOUR_START:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')} (Night Mode)."
-                elif e_hour > SAFE_HOUR_END:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
-                elif e_hour < SAFE_HOUR_START:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
-                # --------------------------------------------------
+                # Check if event is in future (or ongoing)
+                # This fixes the "can't compare offset-naive" error
+                if end_time > now.astimezone(end_time.tzinfo):
+                    conflict_msg = None
+                    s_hour = start_time.hour
+                    e_hour = end_time.hour
+                    
+                    if s_hour < SAFE_HOUR_START:
+                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')} (Night Mode)."
+                    elif e_hour > SAFE_HOUR_END:
+                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
+                    elif e_hour < SAFE_HOUR_START:
+                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
 
-                if conflict_msg:
-                    service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value=conflict_msg)
-                    short_title = title[:5].replace(" ", "")
-                    c_id = f"c_{start_time.strftime('%d%H')}_{short_title}"
-                    if memory_data.get(c_id) != today_str:
-                        send_alert(f"{door_name}: {conflict_msg}", force=True)
-                        memory_data[c_id] = today_str
-                        memory_changed = True
+                    if conflict_msg:
+                        ANY_CONFLICT_FOUND = True
+                        service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value=conflict_msg)
+                        
+                        short_title = title[:5].replace(" ", "")
+                        c_id = f"c_{start_time.strftime('%d%H')}_{short_title}"
+                        if memory_data.get(c_id) != today_str:
+                            send_alert(f"{door_name}: {conflict_msg}", force=True)
+                            memory_data[c_id] = today_str
+                            memory_changed = True
+                # =========================================================
                 
                 pre_min = get_config_value(config.get('pre_buffer'), DEF_PRE)
                 post_min = get_config_value(config.get('post_buffer'), DEF_POST)
@@ -213,6 +200,7 @@ def check_door_schedule():
                 effective_start = start_time - timedelta(minutes=pre_min)
                 effective_end = end_time + timedelta(minutes=post_min)
                 
+                # Fix Timezone here too just in case (already present in prev versions)
                 if effective_start <= now.astimezone(start_time.tzinfo) <= effective_end:
                     should_be_open = True
                     matched_title = title
@@ -261,6 +249,13 @@ def check_door_schedule():
         except Exception as e:
             log.error(f"Error processing {door_name}: {e}")
             
+    if not ANY_CONFLICT_FOUND:
+        try:
+            current_val = state.get(ALERT_ENTITY)
+            if current_val not in ["", "unknown", "unavailable"]:
+                service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value="")
+        except: pass
+
     if memory_changed:
         save_memory()
 
