@@ -1,14 +1,17 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.11.1
-# FIX: Timezone Aware Comparison (Fixes "offset-naive" error)
+# MASTER VERSION: v1.13.0
+# FEATURES: Nightly Report Restored + Phone-Only Alerts + Timezone Fix
 
 import json
 import os
 import sys
 from datetime import datetime, timedelta
 
+# GLOBAL MEMORY
 if "last_unlock_tracker" not in locals():
     last_unlock_tracker = {}
+if "last_nightly_report" not in locals():
+    last_nightly_report = {}
 
 @pyscript_compile
 def read_config_file(path):
@@ -73,7 +76,6 @@ def check_door_schedule():
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
     LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
     MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
-    ALERT_ENTITY = "input_text.door_alerts" 
     
     DEF_PRE = defaults.get("pre_buffer", 15)
     DEF_POST = defaults.get("post_buffer", 15)
@@ -113,11 +115,38 @@ def check_door_schedule():
             json_str = json.dumps(clean_data)
             service.call("input_text", "set_value", entity_id=MEMORY_ENTITY, value=json_str)
         except: pass
+    
+    # -------------------------------------------------------------
+    # NEW: NIGHTLY REPORT (The "Shift End" Check)
+    # -------------------------------------------------------------
+    # Runs exactly at the start of Night Mode (Safe Hour End)
+    if now.hour == SAFE_HOUR_END and now.minute == 0:
+        if last_nightly_report.get("date") != today_str:
+            unlocked_doors = []
+            
+            # Check physical state of all configured doors
+            for door_name, config in data.items():
+                if door_name.lower() == "settings": continue
+                entity_id = config.get('entity')
+                if state.get(entity_id) == 'unlocked':
+                    unlocked_doors.append(door_name)
+            
+            # Send Report
+            if DEF_NOTIFY:
+                try:
+                    domain, service_name = DEF_NOTIFY.split('.', 1)
+                    if unlocked_doors:
+                        msg = f"Night Mode Active. ⚠️ WARNING: These doors are still unlocked: {', '.join(unlocked_doors)}"
+                    else:
+                        msg = "Night Mode Active. 🔒 All doors verified locked."
+                    
+                    service.call(domain, service_name, message=msg)
+                    last_nightly_report["date"] = today_str
+                except: pass
+    # -------------------------------------------------------------
 
     if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on": return
     if state.get(PAUSE_ENTITY) == "on": return
-
-    ANY_CONFLICT_FOUND = False
 
     for door_name, config in data.items():
         if door_name.lower() == "settings": continue
@@ -163,13 +192,7 @@ def check_door_schedule():
                 start_time = datetime.fromisoformat(event["start"])
                 end_time = datetime.fromisoformat(event["end"])
                 
-                # =========================================================
-                #  FIXED CONFLICT CHECKER (Timezone Aware)
-                #  We must convert 'now' to the event's timezone before comparing.
-                # =========================================================
-                
-                # Check if event is in future (or ongoing)
-                # This fixes the "can't compare offset-naive" error
+                # --- CONFLICT CHECK ---
                 if end_time > now.astimezone(end_time.tzinfo):
                     conflict_msg = None
                     s_hour = start_time.hour
@@ -183,16 +206,12 @@ def check_door_schedule():
                         conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
 
                     if conflict_msg:
-                        ANY_CONFLICT_FOUND = True
-                        service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value=conflict_msg)
-                        
                         short_title = title[:5].replace(" ", "")
                         c_id = f"c_{start_time.strftime('%d%H')}_{short_title}"
                         if memory_data.get(c_id) != today_str:
                             send_alert(f"{door_name}: {conflict_msg}", force=True)
                             memory_data[c_id] = today_str
                             memory_changed = True
-                # =========================================================
                 
                 pre_min = get_config_value(config.get('pre_buffer'), DEF_PRE)
                 post_min = get_config_value(config.get('post_buffer'), DEF_POST)
@@ -200,7 +219,6 @@ def check_door_schedule():
                 effective_start = start_time - timedelta(minutes=pre_min)
                 effective_end = end_time + timedelta(minutes=post_min)
                 
-                # Fix Timezone here too just in case (already present in prev versions)
                 if effective_start <= now.astimezone(start_time.tzinfo) <= effective_end:
                     should_be_open = True
                     matched_title = title
@@ -224,13 +242,13 @@ def check_door_schedule():
                 if reset_entity:
                     if current_rule_state != "keep_unlock":
                         select.select_option(entity_id=reset_entity, option="keep_unlock")
-                        if notify_type == 'summary' and is_first_unlock:
+                        if notify_type == 'all' or (notify_type == 'summary' and is_first_unlock):
                             send_alert(f"{door_name}: Unlocked for '{matched_title}'", force=True)
                         log.info(f"🔓 SET KEEP UNLOCKED {door_name}")
                 else:
                     if current_lock_state == "locked":
                         lock.unlock(entity_id=lock_entity)
-                        if notify_type == 'summary' and is_first_unlock:
+                        if notify_type == 'all' or (notify_type == 'summary' and is_first_unlock):
                             send_alert(f"{door_name}: Unlocked for '{matched_title}'", force=True)
                         log.info(f"🔓 UNLOCKED {door_name}")
 
@@ -249,13 +267,6 @@ def check_door_schedule():
         except Exception as e:
             log.error(f"Error processing {door_name}: {e}")
             
-    if not ANY_CONFLICT_FOUND:
-        try:
-            current_val = state.get(ALERT_ENTITY)
-            if current_val not in ["", "unknown", "unavailable"]:
-                service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value="")
-        except: pass
-
     if memory_changed:
         save_memory()
 
