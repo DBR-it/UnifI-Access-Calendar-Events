@@ -1,73 +1,121 @@
 # ==============================================================================
-#  UNI FI ACCESS DOOR MANAGER - CONFIGURATION FILE (EXAMPLE)
+#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION TEMPLATE
 # ==============================================================================
 #  INSTRUCTIONS:
-#  1. Rename this file to 'doors.yaml' inside your /config/pyscript/ folder.
-#  2. Update the Entity IDs below to match your specific Home Assistant devices.
-#  3. Save the file. The Python script will reload changes automatically.
+#  1. Rename this file from 'doors_example.yaml' to 'doors.yaml'.
+#  2. Update the 'Settings' section with your specific Helper Entity IDs.
+#  3. Update the 'Doors' section with your actual Lock and Calendar entities.
+#  4. Restart Home Assistant or Reload Pyscript to apply changes.
 # ==============================================================================
 
 Settings:
-  # 1. MAINTENANCE PAUSE
-  # If ON, the script stops completely. Use this for maintenance/testing.
+  # [REQUIRED] MASTER PAUSE TOGGLE
+  # Create an Input Boolean (Toggle) helper in Home Assistant.
+  # What it does: If you turn this ON, the entire automation stops running.
+  # Use case: Turn this on during holidays or door maintenance to stop auto-unlocking.
   pause_entity: input_boolean.pause_door_schedule
 
-  # 2. PHYSICAL LOCKDOWN SWITCH (Watcher)
-  # The actual "Lock All Doors" switch entity from the UniFi Integration.
-  # The script monitors this. If it turns ON (via App or HA), the schedule stops.
-  lockdown_switch: switch.all_doors_lockdown_example
+  # [OPTIONAL] PHYSICAL LOCKDOWN SWITCH
+  # The Entity ID of a physical switch or a virtual toggle.
+  # What it does: If this switch turns ON, the system ignores the calendar and 
+  # aggressively locks all doors. Useful for security emergencies.
+  lockdown_switch: switch.all_doors_lockdown
 
-  # 3. GLOBAL MASTER KEYWORD HELPER (Optional)
-  # Create an Input Text helper (e.g., input_text.global_door_keyword).
-  # Whatever text you type into that helper becomes the "Master Key" to unlock ALL doors.
-  # Leave blank to disable the Master Key feature.
+  # [OPTIONAL] GLOBAL MASTER KEY
+  # Create an Input Text helper.
+  # What it does: Any text you type here becomes a "Master Password".
+  # If a calendar event title contains this text, ALL doors will unlock.
+  # Example: Type "ALL" in the helper -> Event "Town Hall ALL" unlocks everything.
   global_keyword_helper: input_text.global_door_keyword
 
-  # 4. PERMANENT MEMORY (Required)
-  # Stores "Last Notification Date" and Conflict Alerts to prevent spam.
+  # [REQUIRED] SYSTEM MEMORY
+  # Create an Input Text helper.
+  # What it does: The script writes temporary data here (like "Last Notification Sent")
+  # to prevent spamming your phone and to remember state across reboots.
   memory_entity: input_text.door_manager_memory
 
-  # 5. NIGHT MODE ("The Bouncer")
-  # The system will FORCE LOCK doors between these hours.
-  # If a door is unlocked manually during this time, it is re-locked within 60s.
-  safe_hour_start: "6 AM"
-  safe_hour_end: "11:59 PM"
+  # NIGHT MODE (THE BOUNCER)
+  # Controls the "Safe Hours" when doors can unlock.
+  # Can be hardcoded (e.g., "6 AM") OR point to dashboard helpers (Time).
+  safe_hour_start: input_datetime.night_mode_start
+  safe_hour_end: input_datetime.night_mode_end
 
-  # 6. DEBUGGING
-  # Set to true to see detailed messages in Settings > System > Logs.
+  # [OPTIONAL] DEBUGGING
+  # Set to true to see detailed logs in Settings > System > Logs.
   debug_logging: true
 
 # ==============================================================================
-#  DOOR LIST
+#  DEFAULTS (Global Rules)
 # ==============================================================================
-#  To add more doors, copy the entire block between the "START" and "END" lines.
-#  Paste it below and rename "Front Door" to something unique (e.g. "Side Door").
+#  These settings apply to EVERY door unless you specifically override them 
+#  in the door's own config block. This saves you from copy-pasting the same 
+#  settings 50 times.
+# ==============================================================================
+Defaults:
+  # BUFFER TIMES (Minutes)
+  # Pre: How many minutes BEFORE the calendar event starts should the door unlock?
+  # Post: How many minutes AFTER the event ends should the door stay unlocked?
+  pre_buffer: 15
+  post_buffer: 15
+  
+  # NOTIFICATION SERVICE
+  # The service to use for alerts (e.g., notify.mobile_app_iphone).
+  # If you set this here, all doors will alert this phone by default.
+  notification_service: notify.mobile_app_your_phone
+
+# ==============================================================================
+#  DOOR CONFIGURATION
+# ==============================================================================
+#  Copy and paste the examples below to add your doors.
+#  The top-level name (e.g., "Front Door:") must be unique.
 # ==============================================================================
 
-# vvvvvvvvvvvvvvvvvv  START: COPY FROM HERE  vvvvvvvvvvvvvvvvvv
+# EXAMPLE 1: THE "SMART" DOOR (Recommended)
+# This setup uses Dashboard Helpers so you can adjust settings (like buffers)
+# directly from your phone without editing this YAML file later.
 Front Door:
-  # 1. HARDWARE ENTITIES
-  entity: lock.front_door_example
-  # The "Rule" entity is REQUIRED for the "Keep Unlocked" logic to work.
-  reset_entity: select.front_door_rule_example
-
-  # 2. SCHEDULE
-  # The calendar entity that contains events for this door.
-  calendar: calendar.example_calendar
-
-  # 3. NOTIFICATIONS (Per Door)
-  # Enter your service here (e.g., notify.mobile_app_iphone).
-  # You can send different doors to different phones if needed.
-  notification_service: notify.mobile_app_example
-
-  # NOTIFICATION STYLE:
-  # 'all'     = Notify on every single unlock/lock event.
-  # 'summary' = Notify ONLY on first unlock of the day + Night Mode lock confirmation.
+  # The physical lock entity (e.g., from UniFi, August, Schlage, etc.)
+  entity: lock.front_door
+  # The "Rule" or "Reset" entity. Required for "Keep Unlocked" functionality.
+  reset_entity: select.front_door_lock_rule
+  # The calendar that controls this door.
+  calendar: calendar.office_schedule
+  
+  # KEYWORD: The "Secret Code" to look for in event titles.
+  # Can be a hardcoded string (e.g., keyword: "D1") OR a helper entity.
+  keyword_helper: input_text.door_keyword
+  
+  # BUFFERS: Pointing these to input_numbers allows adjustment from the Dashboard.
+  pre_buffer: input_number.front_door_pre_buffer
+  post_buffer: input_number.front_door_post_buffer
+  
+  # NOTIFICATIONS: 
+  # 'summary' = Only notify on the first unlock of the day.
+  # 'all' = Notify on every lock/unlock action.
   notify_type: summary
 
-  # 4. DASHBOARD HELPERS (Knobs & Settings)
-  # These allow you to adjust settings from the Dashboard without editing code.
-  keyword_helper: input_text.door_keyword
-  pre_helper: input_number.front_door_pre_buffer
-  post_helper: input_number.front_door_post_buffer
-# ^^^^^^^^^^^^^^^^^^   END: COPY UNTIL HERE   ^^^^^^^^^^^^^^^^^^
+
+# EXAMPLE 2: THE "SIMPLE" DOOR (Hardcoded)
+# This setup is faster. You set the values here once, and they never change.
+# It uses the 'Defaults' from above for buffers (15/15), so we don't need to type them.
+# ------------------------------------------------------------------------------
+# Warehouse:
+#   entity: lock.warehouse_door
+#   reset_entity: select.warehouse_rule
+#   calendar: calendar.warehouse_schedule
+#   keyword: "WH"  # <--- Simple text keyword. Event title: "Delivery WH"
+
+
+# EXAMPLE 3: THE "STRICT" DOOR (Zero Buffer)
+# Useful for Server Rooms or Labs where access must be exact.
+# We override the defaults by setting buffers to 0.
+# ------------------------------------------------------------------------------
+# Server Room:
+#   entity: lock.server_room
+#   reset_entity: select.server_rule
+#   calendar: calendar.it_schedule
+#   keyword: "SERVER"
+#   pre_buffer: 0
+#   post_buffer: 0
+#   # Override the default phone; alert the IT Admin instead.
+#   notification_service: notify.it_admin_phone
