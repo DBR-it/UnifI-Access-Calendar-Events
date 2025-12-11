@@ -10,14 +10,16 @@ This Pyscript automation links your calendar events to your smart locks (UniFi A
 
 ---
 
-## ⚠️ Disclaimer
+## ⚠️ Disclaimer & Liability
 **USE AT YOUR OWN RISK.**
-This software controls physical access to your building. While every effort has been made to ensure safety and reliability (including "Night Mode" fail-safes), the authors are not liable for:
-* Doors failing to lock or unlock due to power outages, network failures, or software bugs.
-* Unauthorized access or security breaches.
-* Anyone getting locked out of the building.
 
-**Always carry a physical key or have a backup entry method.**
+This software controls physical access to your building. While every effort has been made to ensure safety and reliability (including "Night Mode" fail-safes), the authors are not liable for:
+* **Integration Failures:** If Home Assistant, UniFi Access, Pyscript, or Google Calendar pushes an update that breaks compatibility, this script may stop working immediately.
+* **Lockouts:** Doors failing to unlock due to power outages, network loss, or configuration errors.
+* **Security:** Unauthorized access or doors remaining unlocked due to user error.
+
+**CRITICAL:** You must **thoroughly test your own configuration** before deploying this in a live environment.
+**ALWAYS carry a physical key or have a backup entry method.**
 
 ---
 
