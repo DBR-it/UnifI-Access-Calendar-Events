@@ -1,6 +1,6 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.5.0
-# FEATURES: Dashboard Night Mode + Hybrid Keywords + Zero Buffer Support
+# MASTER VERSION: v1.6.0
+# FEATURES: 12-Hour Time Format + Dashboard Night Mode + Hybrid Keywords
 
 import json
 import os
@@ -25,15 +25,13 @@ def parse_time(value):
         if isinstance(value, int): return value
         from datetime import datetime
         
-        # NEW: Handle input_datetime entities (HH:MM:SS)
+        # Handle input_datetime entities (HH:MM:SS)
         val_str = str(value).strip()
         if "." in val_str and state.get(val_str) not in ["unknown", "unavailable", None]:
-            # It's an entity! Get the state (e.g., "06:00:00")
             val_str = state.get(val_str)
         
         # Try parsing standard formats
         if ":" in val_str:
-            # Handles "06:00:00" or "6:00 AM"
             try: return datetime.strptime(val_str, "%H:%M:%S").hour
             except: pass
             try: return datetime.strptime(val_str, "%I:%M %p").hour
@@ -41,7 +39,6 @@ def parse_time(value):
             try: return datetime.strptime(val_str, "%H:%M").hour
             except: pass
             
-        # Handles "6 AM" or just "6"
         if "AM" in val_str.upper() or "PM" in val_str.upper():
              return datetime.strptime(val_str.upper(), "%I %p").hour
         return int(float(val_str))
@@ -106,7 +103,7 @@ def check_door_schedule():
 
     DEBUG = settings.get("debug_logging", False)
     
-    # NIGHT MODE (Updated to support Helpers)
+    # NIGHT MODE
     start_raw = settings.get("safe_hour_start", "6 AM")
     end_raw = settings.get("safe_hour_end", "11:59 PM")
     SAFE_HOUR_START = parse_time(start_raw)
@@ -185,12 +182,14 @@ def check_door_schedule():
                 s_hour = start_time.hour
                 e_hour = end_time.hour
                 
+                # --- UPDATED CONFLICT MESSAGES (12-HOUR FORMAT) ---
                 if s_hour < SAFE_HOUR_START:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%H:%M')} (Night Mode)."
+                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')} (Night Mode)."
                 elif e_hour > SAFE_HOUR_END:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%H:%M')} (Night Mode)."
+                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
                 elif e_hour < SAFE_HOUR_START:
-                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%H:%M')} (Night Mode)."
+                    conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
+                # --------------------------------------------------
 
                 if conflict_msg:
                     service.call("input_text", "set_value", entity_id=ALERT_ENTITY, value=conflict_msg)
