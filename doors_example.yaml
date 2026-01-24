@@ -1,5 +1,5 @@
 # ==============================================================================
-#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION
+#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION v1.14.0
 # ==============================================================================
 #  INSTRUCTIONS:
 #  1. Place this file in /config/pyscript/
@@ -84,7 +84,12 @@ Front Door:
   # post_buffer: 15
   
   # NOTIFICATIONS: 'summary' (once per day) or 'all' (every unlock)
+  # NOTE: Conflict alerts and night verification ALWAYS send regardless of this setting
   notify_type: summary
+  
+  # [OPTIONAL] Override notification service for this door only
+  # Useful if you want critical doors to alert a different person
+  # notification_service: notify.mobile_app_manager_phone
 
 
 # EXAMPLE 2: THE "SIMPLE" DOOR (Hardcoded)
@@ -95,6 +100,7 @@ Front Door:
 #   reset_entity: select.warehouse_rule
 #   calendar: calendar.warehouse_schedule
 #   keyword: "WH"         # Hardcoded keyword
+#   notify_type: all      # Get notified every time it unlocks/locks
 #   # Buffers use Defaults (15/15) unless you add them here:
 #   # pre_buffer: 30
 #   # post_buffer: 30
@@ -110,4 +116,67 @@ Front Door:
 #   keyword: "SERVER"
 #   pre_buffer: 0
 #   post_buffer: 0
+#   notify_type: summary
 #   notification_service: notify.it_admin_phone
+
+
+# ==============================================================================
+#  NOTIFICATION BEHAVIOR EXPLAINED
+# ==============================================================================
+#
+#  The new v1.14.0 code sends THREE types of notifications:
+#
+#  1. 🚨 CONFLICT ALERTS (Always sent, regardless of notify_type)
+#     - Sent immediately when a scheduling conflict is detected
+#     - Could be days in advance
+#     - Sent once per conflicting event
+#
+#  2. ⏰ 10-MINUTE WARNING (Always sent, regardless of notify_type)
+#     - Sent 10 minutes before night mode if there's an active conflict
+#     - Sent once per day
+#
+#  3. 🌙 NIGHT VERIFICATION (Always sent to DEFAULT notification service)
+#     - Sent when night mode starts (e.g., 11:00 PM)
+#     - Reports which doors are unlocked
+#     - Sent once per day
+#
+#  4. 🔓 UNLOCK/LOCK NOTIFICATIONS (Respects notify_type setting)
+#     - notify_type: 'summary' = First unlock of the day only
+#     - notify_type: 'all' = Every unlock and lock event
+#
+# ==============================================================================
+
+
+# ==============================================================================
+#  REQUIRED HOME ASSISTANT HELPERS
+# ==============================================================================
+#
+#  You need to create these in Settings > Devices & Services > Helpers:
+#
+#  1. input_boolean.pause_door_schedule
+#     - Type: Toggle
+#     - Name: "Pause Door Schedule"
+#
+#  2. input_text.door_manager_memory
+#     - Type: Text
+#     - Name: "Door Manager Memory"
+#     - Max length: 4096 or higher
+#
+#  3. (Optional) input_text.global_door_keyword
+#     - Type: Text
+#     - Name: "Global Door Keyword"
+#
+#  4. (Optional) input_datetime.night_mode_start
+#     - Type: Date and/or time (Time only)
+#     - Name: "Night Mode Start"
+#
+#  5. (Optional) input_datetime.night_mode_end
+#     - Type: Date and/or time (Time only)
+#     - Name: "Night Mode End"
+#
+#  6. (Optional) Per-door helpers like:
+#     - input_text.door_keyword
+#     - input_number.front_door_pre_buffer (min: 0, max: 120, step: 5)
+#     - input_number.front_door_post_buffer (min: 0, max: 120, step: 5)
+#
+# ==============================================================================
