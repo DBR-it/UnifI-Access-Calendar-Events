@@ -1,6 +1,6 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.13.0
-# FEATURES: Nightly Report Restored + Phone-Only Alerts + Timezone Fix
+# MASTER VERSION: v1.14.0
+# FEATURES: Proactive Conflict Alerts + 10-Min Warning + Night Verification
 
 import json
 import os
@@ -111,17 +111,28 @@ def check_door_schedule():
 
     def save_memory():
         try:
-            clean_data = {k: v for k, v in memory_data.items() if v == today_str}
+            # Clean up old date-based entries, keep event-based conflict alerts
+            clean_data = {}
+            for k, v in memory_data.items():
+                # Keep conflict alerts (not date-based)
+                if v == "alerted":
+                    clean_data[k] = v
+                # Keep today's date-based entries
+                elif v == today_str:
+                    clean_data[k] = v
+            
             json_str = json.dumps(clean_data)
             service.call("input_text", "set_value", entity_id=MEMORY_ENTITY, value=json_str)
-        except: pass
+        except Exception as e:
+            log.error(f"Failed to save memory: {e}")
     
-    # -------------------------------------------------------------
-    # NEW: NIGHTLY REPORT (The "Shift End" Check)
-    # -------------------------------------------------------------
-    # Runs exactly at the start of Night Mode (Safe Hour End)
+    # =================================================================
+    # NOTIFICATION #3: NIGHT MODE VERIFICATION
+    # Runs at the START of night mode to verify all doors are locked
+    # =================================================================
     if now.hour == SAFE_HOUR_END and now.minute == 0:
-        if last_nightly_report.get("date") != today_str:
+        verify_id = f"night_verify_{today_str}"
+        if memory_data.get(verify_id) != today_str:
             unlocked_doors = []
             
             # Check physical state of all configured doors
@@ -131,19 +142,25 @@ def check_door_schedule():
                 if state.get(entity_id) == 'unlocked':
                     unlocked_doors.append(door_name)
             
-            # Send Report
+            # Send Verification Report
             if DEF_NOTIFY:
                 try:
                     domain, service_name = DEF_NOTIFY.split('.', 1)
                     if unlocked_doors:
-                        msg = f"Night Mode Active. ⚠️ WARNING: These doors are still unlocked: {', '.join(unlocked_doors)}"
+                        msg = f"🌙 Night Mode Active ({SAFE_HOUR_END}:00 PM)\n"
+                        msg += f"⚠️ WARNING: These doors are still UNLOCKED:\n"
+                        msg += f"{', '.join(unlocked_doors)}\n"
+                        msg += f"Check for scheduling conflicts or lock manually!"
                     else:
-                        msg = "Night Mode Active. 🔒 All doors verified locked."
+                        msg = f"🌙 Night Mode Active ({SAFE_HOUR_END}:00 PM)\n"
+                        msg += f"✅ All doors verified LOCKED."
                     
                     service.call(domain, service_name, message=msg)
-                    last_nightly_report["date"] = today_str
-                except: pass
-    # -------------------------------------------------------------
+                    memory_data[verify_id] = today_str
+                    memory_changed = True
+                    log.info(f"✅ Night verification sent: {len(unlocked_doors)} unlocked")
+                except Exception as e:
+                    log.error(f"Night verification failed: {e}")
 
     if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on": return
     if state.get(PAUSE_ENTITY) == "on": return
@@ -158,7 +175,7 @@ def check_door_schedule():
             events = calendar.get_events(
                 entity_id=calendar_entity, 
                 start_date_time=now - timedelta(hours=4),
-                end_date_time=now + timedelta(hours=4)
+                end_date_time=now + timedelta(days=7)  # Look ahead 7 days for conflicts
             )
             event_list = events.get(calendar_entity, {}).get("events", [])
             
@@ -174,7 +191,9 @@ def check_door_schedule():
                 try:
                     domain, service_name = notify_service.split('.', 1)
                     service.call(domain, service_name, message=msg)
-                except: pass
+                    if DEBUG: log.info(f"📱 Notification sent: {msg[:50]}...")
+                except Exception as e:
+                    log.error(f"Notification failed: {e}")
 
             for event in event_list:
                 title = event.get("summary", "").lower()
@@ -191,28 +210,78 @@ def check_door_schedule():
 
                 start_time = datetime.fromisoformat(event["start"])
                 end_time = datetime.fromisoformat(event["end"])
+                event_date_str = start_time.strftime('%Y-%m-%d')
                 
-                # --- CONFLICT CHECK ---
-                if end_time > now.astimezone(end_time.tzinfo):
-                    conflict_msg = None
-                    s_hour = start_time.hour
-                    e_hour = end_time.hour
+                # =================================================================
+                # NOTIFICATION #1: PROACTIVE CONFLICT DETECTION
+                # Alerts as soon as a scheduling conflict is detected (any future date)
+                # =================================================================
+                s_hour = start_time.hour
+                e_hour = end_time.hour
+                
+                conflict_type = None
+                conflict_time = None
+                
+                # Check if event overlaps with night mode hours
+                if s_hour < SAFE_HOUR_START:  # Starts during night (e.g., 3 AM)
+                    conflict_type = "starts"
+                    conflict_time = start_time.strftime('%I:%M %p on %b %d')
+                elif s_hour > SAFE_HOUR_END:  # Starts during night (e.g., 11:30 PM)
+                    conflict_type = "starts"
+                    conflict_time = start_time.strftime('%I:%M %p on %b %d')
+                elif e_hour > SAFE_HOUR_END:  # Ends during night (e.g., ends 11:30 PM)
+                    conflict_type = "ends"
+                    conflict_time = end_time.strftime('%I:%M %p on %b %d')
+                elif e_hour < SAFE_HOUR_START:  # Ends during night (e.g., ends 2 AM)
+                    conflict_type = "ends"
+                    conflict_time = end_time.strftime('%I:%M %p on %b %d')
+                
+                if conflict_type:
+                    # Create unique ID for this specific event occurrence
+                    short_title = title[:8].replace(" ", "")
+                    conflict_id = f"conflict_{door_name}_{event_date_str}_{short_title}"
                     
-                    if s_hour < SAFE_HOUR_START:
-                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' starts at {start_time.strftime('%I:%M %p')} (Night Mode)."
-                    elif e_hour > SAFE_HOUR_END:
-                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
-                    elif e_hour < SAFE_HOUR_START:
-                        conflict_msg = f"⚠️ CONFLICT: '{event['summary']}' ends at {end_time.strftime('%I:%M %p')} (Night Mode)."
-
-                    if conflict_msg:
-                        short_title = title[:5].replace(" ", "")
-                        c_id = f"c_{start_time.strftime('%d%H')}_{short_title}"
-                        if memory_data.get(c_id) != today_str:
-                            send_alert(f"{door_name}: {conflict_msg}", force=True)
-                            memory_data[c_id] = today_str
-                            memory_changed = True
+                    # ALERT #1: Send once per event (not once per day)
+                    if conflict_id not in memory_data:
+                        conflict_msg = f"⚠️ SCHEDULE CONFLICT DETECTED\n"
+                        conflict_msg += f"Door: {door_name}\n"
+                        conflict_msg += f"Event: '{event['summary']}'\n"
+                        conflict_msg += f"{conflict_type.capitalize()} at {conflict_time}\n"
+                        conflict_msg += f"Overlaps Night Mode ({SAFE_HOUR_END}:00 PM - {SAFE_HOUR_START}:00 AM)"
+                        
+                        send_alert(conflict_msg, force=True)
+                        memory_data[conflict_id] = "alerted"  # Mark as alerted (persistent)
+                        memory_changed = True
+                        log.info(f"🚨 CONFLICT ALERT: {conflict_id}")
+                    
+                    # =================================================================
+                    # NOTIFICATION #2: 10-MINUTE WARNING
+                    # Only if event is TODAY and we're approaching night mode
+                    # =================================================================
+                    if event_date_str == today_str:
+                        # Calculate minutes until night mode starts
+                        minutes_until_night = (SAFE_HOUR_END - now.hour) * 60 + (0 - now.minute)
+                        
+                        # Trigger in 10-minute window (9-11 minutes before)
+                        if 9 <= minutes_until_night <= 11:
+                            reminder_id = f"reminder_{door_name}_{event_date_str}"
+                            
+                            if memory_data.get(reminder_id) != today_str:
+                                reminder_msg = f"⏰ 10-MINUTE WARNING\n"
+                                reminder_msg += f"Door: {door_name}\n"
+                                reminder_msg += f"Event: '{event['summary']}'\n"
+                                reminder_msg += f"{conflict_type.capitalize()} during Night Mode ({conflict_time})\n"
+                                reminder_msg += f"Night Mode starts in ~10 minutes!"
+                                
+                                send_alert(reminder_msg, force=True)
+                                memory_data[reminder_id] = today_str
+                                memory_changed = True
+                                log.info(f"⏰ 10-MIN REMINDER: {reminder_id}")
                 
+                # =================================================================
+                # NORMAL SCHEDULE PROCESSING
+                # Unlock/lock doors based on current event timing
+                # =================================================================
                 pre_min = get_config_value(config.get('pre_buffer'), DEF_PRE)
                 post_min = get_config_value(config.get('post_buffer'), DEF_POST)
 
@@ -229,6 +298,7 @@ def check_door_schedule():
             current_lock_state = state.get(lock_entity)
             current_rule_state = state.get(reset_entity) if reset_entity else None
 
+            # Override: Force lock during night mode hours
             if now.hour < SAFE_HOUR_START or now.hour > SAFE_HOUR_END:
                 should_be_open = False 
 
@@ -243,25 +313,27 @@ def check_door_schedule():
                     if current_rule_state != "keep_unlock":
                         select.select_option(entity_id=reset_entity, option="keep_unlock")
                         if notify_type == 'all' or (notify_type == 'summary' and is_first_unlock):
-                            send_alert(f"{door_name}: Unlocked for '{matched_title}'", force=True)
+                            send_alert(f"🔓 {door_name}: Unlocked for '{matched_title}'", force=is_first_unlock)
                         log.info(f"🔓 SET KEEP UNLOCKED {door_name}")
                 else:
                     if current_lock_state == "locked":
                         lock.unlock(entity_id=lock_entity)
                         if notify_type == 'all' or (notify_type == 'summary' and is_first_unlock):
-                            send_alert(f"{door_name}: Unlocked for '{matched_title}'", force=True)
+                            send_alert(f"🔓 {door_name}: Unlocked for '{matched_title}'", force=is_first_unlock)
                         log.info(f"🔓 UNLOCKED {door_name}")
 
             else:
                 if reset_entity:
                     if current_rule_state == "keep_unlock":
                         select.select_option(entity_id=reset_entity, option="reset")
-                        if notify_type == 'all': send_alert(f"{door_name} Locked", force=True)
+                        if notify_type == 'all': 
+                            send_alert(f"🔒 {door_name}: Locked")
                         log.info(f"🔒 RESET RULE {door_name}")
                 else:
                     if current_lock_state == "unlocked":
                         lock.lock(entity_id=lock_entity)
-                        if notify_type == 'all': send_alert(f"{door_name} Locked", force=True)
+                        if notify_type == 'all': 
+                            send_alert(f"🔒 {door_name}: Locked")
                         log.info(f"🔒 LOCKED {door_name}")
                     
         except Exception as e:
