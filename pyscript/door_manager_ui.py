@@ -1,17 +1,13 @@
 # door_manager_ui.py
-# MASTER VERSION: v1.14.0
-# FEATURES: Proactive Conflict Alerts + 10-Min Warning + Night Verification
+# MASTER VERSION: v2.0.1
+# FEATURES: File-Based Memory + Auto-Cleanup + DEBUG LOGGING
 
 import json
 import os
-import sys
 from datetime import datetime, timedelta
 
-# GLOBAL MEMORY
-if "last_unlock_tracker" not in locals():
-    last_unlock_tracker = {}
-if "last_nightly_report" not in locals():
-    last_nightly_report = {}
+# MEMORY FILE LOCATION
+MEMORY_FILE = "/config/pyscript/door_memory.json"
 
 @pyscript_compile
 def read_config_file(path):
@@ -21,6 +17,30 @@ def read_config_file(path):
             return yaml.safe_load(f)
     except Exception:
         return None
+
+@pyscript_compile
+def load_memory_from_file():
+    """Load memory from persistent JSON file"""
+    import json
+    try:
+        with open(MEMORY_FILE, 'r') as f:
+            data = json.load(f)
+            return {"status": "success", "data": data, "count": len(data)}
+    except FileNotFoundError:
+        return {"status": "new_file", "data": {}, "count": 0}
+    except Exception as e:
+        return {"status": "error", "data": {}, "error": str(e)}
+
+@pyscript_compile
+def save_memory_to_file(data):
+    """Save memory to persistent JSON file"""
+    import json
+    try:
+        with open(MEMORY_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return {"status": "success", "count": len(data)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 def parse_time(value):
     try:
@@ -39,7 +59,7 @@ def parse_time(value):
         if "AM" in val_str.upper() or "PM" in val_str.upper():
              return datetime.strptime(val_str.upper(), "%I %p").hour
         return int(float(val_str))
-    except: return 0 
+    except: return 0
 
 def get_config_value(val, default_val=0):
     if val is None: return float(default_val)
@@ -62,6 +82,9 @@ def get_string_value(val):
 
 @service
 def check_door_schedule():
+    log.info("=" * 60)
+    log.info("🚀 DOOR MANAGER: Starting check_door_schedule")
+
     CONFIG_FILE = "/config/pyscript/doors.yaml"
     data = task.executor(read_config_file, CONFIG_FILE)
     if data is None:
@@ -74,13 +97,12 @@ def check_door_schedule():
     if not defaults: defaults = data.pop("defaults", {})
 
     PAUSE_ENTITY = settings.get("pause_entity", "input_boolean.pause_door_schedule")
-    LOCKDOWN_SWITCH = settings.get("lockdown_switch", None) 
-    MEMORY_ENTITY = settings.get("memory_entity", "input_text.door_manager_memory")
-    
+    LOCKDOWN_SWITCH = settings.get("lockdown_switch", None)
+
     DEF_PRE = defaults.get("pre_buffer", 15)
     DEF_POST = defaults.get("post_buffer", 15)
     DEF_NOTIFY = defaults.get("notification_service", None)
-    
+
     global_helper = settings.get("global_keyword_helper", None)
     GLOBAL_KEYWORD = None
     if global_helper:
@@ -91,7 +113,7 @@ def check_door_schedule():
         except: pass
 
     DEBUG = settings.get("debug_logging", False)
-    
+
     nm_start_raw = settings.get("night_mode_start", "11:59 PM")
     nm_end_raw = settings.get("night_mode_end", "6 AM")
     SAFE_HOUR_END = parse_time(nm_start_raw)
@@ -99,92 +121,188 @@ def check_door_schedule():
 
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
-    memory_data = {}
-    memory_changed = False 
-    
-    try:
-        raw_mem = state.get(MEMORY_ENTITY)
-        if raw_mem and raw_mem not in ["unknown", "unavailable", ""]:
-            memory_data = json.loads(raw_mem)
-    except Exception as e:
-        memory_data = {}
+    now_date = now.date()
 
-    def save_memory():
-        try:
-            # Clean up old date-based entries, keep event-based conflict alerts
-            clean_data = {}
-            for k, v in memory_data.items():
-                # Keep conflict alerts (not date-based)
-                if v == "alerted":
-                    clean_data[k] = v
-                # Keep today's date-based entries
-                elif v == today_str:
-                    clean_data[k] = v
-            
-            json_str = json.dumps(clean_data)
-            service.call("input_text", "set_value", entity_id=MEMORY_ENTITY, value=json_str)
-        except Exception as e:
-            log.error(f"Failed to save memory: {e}")
-    
+    log.info(f"🔍 DEBUG: Current time: {now}, hour: {now.hour}, minute: {now.minute}")
+    log.info(f"🔍 DEBUG: Night mode hours: {SAFE_HOUR_END}:00 PM - {SAFE_HOUR_START}:00 AM")
+    log.info(f"🔍 DEBUG: Default buffers: Pre={DEF_PRE}, Post={DEF_POST}")
+
     # =================================================================
-    # NOTIFICATION #3: NIGHT MODE VERIFICATION
-    # Runs at the START of night mode to verify all doors are locked
+    # LOAD MEMORY FROM FILE
     # =================================================================
+    load_result = task.executor(load_memory_from_file)
+    memory_data = load_result.get("data", {})
+    memory_changed = False
+
+    if load_result["status"] == "success":
+        log.info(f"✅ Loaded memory: {load_result['count']} entries")
+    elif load_result["status"] == "new_file":
+        log.info("📝 Creating new memory file (first run)")
+        memory_changed = True
+    else:
+        log.error(f"Failed to load memory: {load_result.get('error', 'Unknown error')}")
+
+    # =================================================================
+    # AUTO-CLEANUP: Remove old/expired entries
+    # =================================================================
+    clean_data = {}
+    cleaned_count = 0
+
+    for k, v in memory_data.items():
+        keep_entry = False
+
+        if v == "alerted" and k.startswith("conflict_"):
+            try:
+                parts = k.split('_')
+                if len(parts) >= 3:
+                    date_str = parts[2]
+                    event_date = datetime.strptime(date_str, '%Y%m%d').date()
+                    if event_date >= now_date:
+                        keep_entry = True
+                    else:
+                        cleaned_count += 1
+            except:
+                keep_entry = True
+        elif v == today_str:
+            keep_entry = True
+        elif v not in ["alerted", today_str]:
+            keep_entry = True
+
+        if keep_entry:
+            clean_data[k] = v
+
+    if cleaned_count > 0:
+        log.info(f"🧹 Cleaned up {cleaned_count} old memory entries")
+        memory_changed = True
+
+    memory_data = clean_data
+
+    # Night mode verification code...
     if now.hour == SAFE_HOUR_END and now.minute == 0:
         verify_id = f"night_verify_{today_str}"
         if memory_data.get(verify_id) != today_str:
-            unlocked_doors = []
-            
-            # Check physical state of all configured doors
+            doors_forced_locked = []
+            active_events_running = []
+
             for door_name, config in data.items():
                 if door_name.lower() == "settings": continue
-                entity_id = config.get('entity')
-                if state.get(entity_id) == 'unlocked':
-                    unlocked_doors.append(door_name)
-            
-            # Send Verification Report
+
+                lock_entity = config.get('entity')
+                reset_entity = config.get('reset_entity')
+                current_state = state.get(lock_entity)
+
+                if current_state == 'unlocked':
+                    if reset_entity:
+                        select.select_option(entity_id=reset_entity, option="reset")
+                        log.info(f"🌙 NIGHT MODE: Reset rule {door_name}")
+                    else:
+                        lock.lock(entity_id=lock_entity)
+                        log.info(f"🌙 NIGHT MODE: Locked {door_name}")
+
+                    doors_forced_locked.append(door_name)
+
+                    calendar_entity = config.get('calendar')
+                    if calendar_entity:
+                        try:
+                            events = calendar.get_events(
+                                entity_id=calendar_entity,
+                                start_date_time=now - timedelta(hours=1),
+                                end_date_time=now + timedelta(hours=1)
+                            )
+                            event_list = events.get(calendar_entity, {}).get("events", [])
+
+                            for event in event_list:
+                                title = event.get("summary", "")
+                                if "canceled" in title.lower() or "cancelled" in title.lower():
+                                    continue
+
+                                start_time = datetime.fromisoformat(event["start"])
+                                end_time = datetime.fromisoformat(event["end"])
+
+                                pre_min = get_config_value(config.get('pre_buffer'), DEF_PRE)
+                                post_min = get_config_value(config.get('post_buffer'), DEF_POST)
+                                effective_start = start_time - timedelta(minutes=pre_min)
+                                effective_end = end_time + timedelta(minutes=post_min)
+
+                                if effective_start <= now.astimezone(start_time.tzinfo) <= effective_end:
+                                    active_events_running.append(f"{door_name}: '{title}' (ends {end_time.strftime('%I:%M %p')})")
+                                    break
+                        except:
+                            pass
+
             if DEF_NOTIFY:
                 try:
                     domain, service_name = DEF_NOTIFY.split('.', 1)
-                    if unlocked_doors:
+
+                    if doors_forced_locked:
                         msg = f"🌙 Night Mode Active ({SAFE_HOUR_END}:00 PM)\n"
-                        msg += f"⚠️ WARNING: These doors are still UNLOCKED:\n"
-                        msg += f"{', '.join(unlocked_doors)}\n"
-                        msg += f"Check for scheduling conflicts or lock manually!"
+                        msg += f"🔒 Locked {len(doors_forced_locked)} door(s): {', '.join(doors_forced_locked)}\n"
+
+                        if active_events_running:
+                            msg += f"\n⚠️ NOTE: These doors had active events that were overridden:\n"
+                            msg += "\n".join(active_events_running)
+                        else:
+                            msg += "\n✅ No conflicts - all events had ended."
                     else:
                         msg = f"🌙 Night Mode Active ({SAFE_HOUR_END}:00 PM)\n"
-                        msg += f"✅ All doors verified LOCKED."
-                    
+                        msg += f"✅ All doors already secured."
+
                     service.call(domain, service_name, message=msg)
                     memory_data[verify_id] = today_str
                     memory_changed = True
-                    log.info(f"✅ Night verification sent: {len(unlocked_doors)} unlocked")
+                    log.info(f"✅ Night verification: {len(doors_forced_locked)} locked, {len(active_events_running)} conflicts")
                 except Exception as e:
                     log.error(f"Night verification failed: {e}")
 
-    if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on": return
-    if state.get(PAUSE_ENTITY) == "on": return
+    if LOCKDOWN_SWITCH and state.get(LOCKDOWN_SWITCH) == "on":
+        log.info("🔒 LOCKDOWN MODE ACTIVE - Exiting")
+        if memory_changed:
+            task.executor(save_memory_to_file, memory_data)
+        return
+
+    if state.get(PAUSE_ENTITY) == "on":
+        log.info("⏸️ PAUSE SWITCH ON - Exiting")
+        if memory_changed:
+            task.executor(save_memory_to_file, memory_data)
+        return
+
+    log.info(f"🚪 Processing {len([k for k in data.keys() if k.lower() != 'settings'])} doors...")
 
     for door_name, config in data.items():
         if door_name.lower() == "settings": continue
 
         try:
-            calendar_entity = config.get('calendar')
-            if not calendar_entity: continue
+            log.info(f"\n--- Processing door: {door_name} ---")
 
-            events = calendar.get_events(
-                entity_id=calendar_entity, 
-                start_date_time=now - timedelta(hours=4),
-                end_date_time=now + timedelta(days=7)  # Look ahead 7 days for conflicts
-            )
-            event_list = events.get(calendar_entity, {}).get("events", [])
-            
+            calendar_entity = config.get('calendar')
+            if not calendar_entity:
+                log.warning(f"No calendar configured for {door_name}")
+                continue
+
+            log.info(f"📅 Fetching events from {calendar_entity}")
+
+            # Calculate time range
+            start_dt = now - timedelta(hours=4)
+            end_dt = now + timedelta(days=7)
+
+            try:
+                events_result = calendar.get_events(
+                    entity_id=calendar_entity,
+                    start_date_time=start_dt,
+                    end_date_time=end_dt
+                )
+                event_list = events_result.get(calendar_entity, {}).get("events", [])
+                log.info(f"📅 Found {len(event_list)} total events")
+            except Exception as e:
+                log.error(f"📅 Failed to get events: {e}")
+                event_list = []
+
             should_be_open = False
             matched_title = ""
-            
+
             notify_service = config.get('notification_service', DEF_NOTIFY)
-            notify_type = config.get('notify_type', 'all') 
-            
+            notify_type = config.get('notify_type', 'all')
+
             def send_alert(msg, force=False):
                 if not notify_service: return
                 if notify_type == 'summary' and not force: return
@@ -198,115 +316,112 @@ def check_door_schedule():
             for event in event_list:
                 title = event.get("summary", "").lower()
                 if "canceled" in title or "cancelled" in title: continue
-                
+
                 raw_key = config.get('keyword_helper')
                 if not raw_key: raw_key = config.get('keyword')
                 keyword = get_string_value(raw_key)
 
+                log.info(f"🔑 Checking event '{event.get('summary')}' with keyword '{keyword}'")
+
                 is_global_match = (GLOBAL_KEYWORD and GLOBAL_KEYWORD in title)
                 is_local_match = (keyword != "" and keyword in title)
 
-                if not is_global_match and not is_local_match: continue 
+                if not is_global_match and not is_local_match:
+                    log.info(f"   ❌ Keyword mismatch (looking for '{keyword}' or global '{GLOBAL_KEYWORD}')")
+                    continue
+
+                log.info(f"   ✅ Keyword matched!")
 
                 start_time = datetime.fromisoformat(event["start"])
                 end_time = datetime.fromisoformat(event["end"])
                 event_date_str = start_time.strftime('%Y-%m-%d')
-                
-                # =================================================================
-                # NOTIFICATION #1: PROACTIVE CONFLICT DETECTION
-                # Alerts as soon as a scheduling conflict is detected (any future date)
-                # =================================================================
-                s_hour = start_time.hour
-                e_hour = end_time.hour
-                
+
+                # Conflict detection (simplified for now - skip detailed logging)
+                event_date = start_time.date()
+
+                if start_time.hour < SAFE_HOUR_START:
+                    night_start = datetime.combine(event_date - timedelta(days=1), datetime.min.time().replace(hour=SAFE_HOUR_END, minute=0))
+                    night_end = datetime.combine(event_date, datetime.min.time().replace(hour=SAFE_HOUR_START, minute=0))
+                else:
+                    night_start = datetime.combine(event_date, datetime.min.time().replace(hour=SAFE_HOUR_END, minute=0))
+                    night_end = datetime.combine(event_date + timedelta(days=1), datetime.min.time().replace(hour=SAFE_HOUR_START, minute=0))
+
+                night_start = night_start.replace(tzinfo=start_time.tzinfo)
+                night_end = night_end.replace(tzinfo=start_time.tzinfo)
+
                 conflict_type = None
-                conflict_time = None
-                
-                # Check if event overlaps with night mode hours
-                if s_hour < SAFE_HOUR_START:  # Starts during night (e.g., 3 AM)
+                if night_start <= start_time < night_end:
                     conflict_type = "starts"
-                    conflict_time = start_time.strftime('%I:%M %p on %b %d')
-                elif s_hour > SAFE_HOUR_END:  # Starts during night (e.g., 11:30 PM)
-                    conflict_type = "starts"
-                    conflict_time = start_time.strftime('%I:%M %p on %b %d')
-                elif e_hour > SAFE_HOUR_END:  # Ends during night (e.g., ends 11:30 PM)
+                elif night_start < end_time <= night_end:
                     conflict_type = "ends"
-                    conflict_time = end_time.strftime('%I:%M %p on %b %d')
-                elif e_hour < SAFE_HOUR_START:  # Ends during night (e.g., ends 2 AM)
-                    conflict_type = "ends"
-                    conflict_time = end_time.strftime('%I:%M %p on %b %d')
-                
+                elif start_time < night_start and end_time > night_end:
+                    conflict_type = "spans"
+
                 if conflict_type:
-                    # Create unique ID for this specific event occurrence
                     short_title = title[:8].replace(" ", "")
-                    conflict_id = f"conflict_{door_name}_{event_date_str}_{short_title}"
-                    
-                    # ALERT #1: Send once per event (not once per day)
+                    start_hour = start_time.strftime('%H')
+                    conflict_id = f"conflict_{door_name}_{event_date_str.replace('-', '')}_{start_hour}_{short_title}"
+
                     if conflict_id not in memory_data:
                         conflict_msg = f"⚠️ SCHEDULE CONFLICT DETECTED\n"
                         conflict_msg += f"Door: {door_name}\n"
                         conflict_msg += f"Event: '{event['summary']}'\n"
-                        conflict_msg += f"{conflict_type.capitalize()} at {conflict_time}\n"
-                        conflict_msg += f"Overlaps Night Mode ({SAFE_HOUR_END}:00 PM - {SAFE_HOUR_START}:00 AM)"
-                        
+                        conflict_msg += f"{conflict_type.capitalize()} at {start_time.strftime('%I:%M %p on %b %d')}\n"
+                        conflict_msg += f"Overlaps Night Mode ({SAFE_HOUR_END}:00 PM - {SAFE_HOUR_START}:00 AM)\n"
+                        conflict_msg += f"Doors will remain locked during night mode."
+
                         send_alert(conflict_msg, force=True)
-                        memory_data[conflict_id] = "alerted"  # Mark as alerted (persistent)
+                        memory_data[conflict_id] = "alerted"
                         memory_changed = True
                         log.info(f"🚨 CONFLICT ALERT: {conflict_id}")
-                    
-                    # =================================================================
-                    # NOTIFICATION #2: 10-MINUTE WARNING
-                    # Only if event is TODAY and we're approaching night mode
-                    # =================================================================
-                    if event_date_str == today_str:
-                        # Calculate minutes until night mode starts
-                        minutes_until_night = (SAFE_HOUR_END - now.hour) * 60 + (0 - now.minute)
-                        
-                        # Trigger in 10-minute window (9-11 minutes before)
-                        if 9 <= minutes_until_night <= 11:
-                            reminder_id = f"reminder_{door_name}_{event_date_str}"
-                            
-                            if memory_data.get(reminder_id) != today_str:
-                                reminder_msg = f"⏰ 10-MINUTE WARNING\n"
-                                reminder_msg += f"Door: {door_name}\n"
-                                reminder_msg += f"Event: '{event['summary']}'\n"
-                                reminder_msg += f"{conflict_type.capitalize()} during Night Mode ({conflict_time})\n"
-                                reminder_msg += f"Night Mode starts in ~10 minutes!"
-                                
-                                send_alert(reminder_msg, force=True)
-                                memory_data[reminder_id] = today_str
-                                memory_changed = True
-                                log.info(f"⏰ 10-MIN REMINDER: {reminder_id}")
-                
+
                 # =================================================================
-                # NORMAL SCHEDULE PROCESSING
-                # Unlock/lock doors based on current event timing
+                # NORMAL SCHEDULE PROCESSING - WITH DEBUG
                 # =================================================================
                 pre_min = get_config_value(config.get('pre_buffer'), DEF_PRE)
                 post_min = get_config_value(config.get('post_buffer'), DEF_POST)
 
+                log.info(f"   📊 Buffers: pre={pre_min}min, post={post_min}min")
+
                 effective_start = start_time - timedelta(minutes=pre_min)
                 effective_end = end_time + timedelta(minutes=post_min)
-                
-                if effective_start <= now.astimezone(start_time.tzinfo) <= effective_end:
-                    should_be_open = True
-                    matched_title = title
-                    break 
+
+                log.info(f"   ⏰ Event time: {start_time.strftime('%I:%M %p')} - {end_time.strftime('%I:%M %p')}")
+                log.info(f"   ⏰ Effective window: {effective_start.strftime('%I:%M %p')} - {effective_end.strftime('%I:%M %p')}")
+
+                try:
+                    now_tz = now.astimezone(start_time.tzinfo)
+                    log.info(f"   ⏰ Current time (TZ adjusted): {now_tz.strftime('%I:%M %p')}")
+                    log.info(f"   ⏰ Checking: {effective_start} <= {now_tz} <= {effective_end}")
+
+                    if effective_start <= now_tz <= effective_end:
+                        should_be_open = True
+                        matched_title = title
+                        log.info(f"   ✅ MATCH! Door should be UNLOCKED for this event")
+                        break
+                    else:
+                        log.info(f"   ❌ Outside time window")
+                except Exception as e:
+                    log.error(f"   ❌ Timezone conversion error: {e}")
 
             lock_entity = config['entity']
             reset_entity = config.get('reset_entity')
             current_lock_state = state.get(lock_entity)
             current_rule_state = state.get(reset_entity) if reset_entity else None
 
+            log.info(f"🔐 Current door state: {current_lock_state}")
+            log.info(f"🔐 Should be open: {should_be_open}")
+
             # Override: Force lock during night mode hours
             if now.hour < SAFE_HOUR_START or now.hour > SAFE_HOUR_END:
-                should_be_open = False 
+                log.info(f"🌙 Night mode override: Forcing door locked")
+                should_be_open = False
 
             if should_be_open:
                 is_first_unlock = False
                 if memory_data.get(door_name) != today_str:
                     is_first_unlock = True
-                    memory_data[door_name] = today_str 
+                    memory_data[door_name] = today_str
                     memory_changed = True
 
                 if reset_entity:
@@ -326,21 +441,28 @@ def check_door_schedule():
                 if reset_entity:
                     if current_rule_state == "keep_unlock":
                         select.select_option(entity_id=reset_entity, option="reset")
-                        if notify_type == 'all': 
+                        if notify_type == 'all':
                             send_alert(f"🔒 {door_name}: Locked")
                         log.info(f"🔒 RESET RULE {door_name}")
                 else:
                     if current_lock_state == "unlocked":
                         lock.lock(entity_id=lock_entity)
-                        if notify_type == 'all': 
+                        if notify_type == 'all':
                             send_alert(f"🔒 {door_name}: Locked")
                         log.info(f"🔒 LOCKED {door_name}")
-                    
+
         except Exception as e:
             log.error(f"Error processing {door_name}: {e}")
-            
+
     if memory_changed:
-        save_memory()
+        save_result = task.executor(save_memory_to_file, memory_data)
+        if save_result["status"] == "success":
+            log.info(f"💾 Saved memory: {save_result['count']} entries")
+        else:
+            log.error(f"Failed to save memory: {save_result.get('error', 'Unknown error')}")
+
+    log.info("🏁 DOOR MANAGER: Finished")
+    log.info("=" * 60)
 
 @time_trigger("cron(* * * * *)")
 def run_every_minute():

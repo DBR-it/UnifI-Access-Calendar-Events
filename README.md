@@ -2,7 +2,7 @@
   <img src="Banner.png" alt="UniFi Access Door Manager Banner" style="width: 100%; height: auto;">
 </p>
 
-# 🔐 UniFi Access Door Manager (for Home Assistant)
+# 🔐 UniFi Access Door Manager v2.0.1 (for Home Assistant)
 
 **Automate your commercial or residential locks using Google/Outlook Calendars.**
 
@@ -71,13 +71,13 @@ You must create these manually in **Settings > Devices & Services > Helpers**.
 | **Night Mode Start**| `input_datetime.night_mode_start` | Time | N/A | When the building closes (Lockdown starts). |
 | **Night Mode End** | `input_datetime.night_mode_end` | Time | N/A | When the building opens (Lockdown ends). |
 
-**REMOVED:** ~~`input_text.door_manager_memory`~~ - Now uses file-based storage automatically!
+**REMOVED:** ~~`input_text.door_manager_memory`~~ - Now uses file-based storage at `/config/pyscript/door_memory.json` automatically!
 
 ### 3. Install the Script
 1.  Navigate to your `/config/` folder using File Editor or VS Code.
 2.  Create a folder named `pyscript` if it doesn't exist.
 3.  Upload `door_manager_ui.py` to `/config/pyscript/`.
-4.  Upload `doors.yaml` to `/config/pyscript/`.
+4.  Copy `doors_example.yaml` to `/config/pyscript/doors.yaml` and customize it.
 5.  **Reload Pyscript:** Go to **Developer Tools > YAML > Pyscript Python Scripting > Reload**
 
 ### 4. Configure Your Doors
@@ -108,7 +108,7 @@ Front Door:
 
 ---
 
-## 🆕 What's New in This Version
+## 🆕 What's New in v2.0.1
 
 ### File-Based Memory System
 The system now uses **persistent JSON file storage** instead of the `input_text.door_manager_memory` helper:
@@ -117,10 +117,10 @@ The system now uses **persistent JSON file storage** instead of the `input_text.
 - ✅ **Survives reboots** - No more duplicate notifications after Home Assistant restarts
 - ✅ **No size limits** - Can track unlimited conflicts and events
 - ✅ **Auto-cleanup** - Old entries are automatically purged
-- ✅ **Easy debugging** - Just open `/config/pyscript/door_manager_memory.json` to inspect
+- ✅ **Easy debugging** - Just open `/config/pyscript/door_memory.json` to inspect
 - ✅ **Minimal disk writes** - Only writes when memory changes (typically 5-10 times per day)
 
-**Memory File Location:** `/config/pyscript/door_manager_memory.json`
+**Memory File Location:** `/config/pyscript/door_memory.json`
 
 ### Automatic Cleanup
 The system automatically removes:
@@ -134,6 +134,11 @@ This prevents memory bloat and ensures optimal performance.
 - Events that end AFTER night mode begins no longer trigger 10-minute warnings
 - Night mode start alert consolidates all active conflicts
 - Better handling of events that span across night mode boundaries
+
+### Enhanced Debug Logging
+- Comprehensive logging for troubleshooting
+- Enable with `debug_logging: true` in your `doors.yaml`
+- Shows keyword matching, buffer calculations, and timezone handling
 
 ---
 
@@ -166,7 +171,7 @@ Entries are removed when:
 3. Verify Pyscript is loaded: **Developer Tools > YAML > Pyscript Python Scripting > Reload**
 
 ### Duplicate notifications after reboot?
-- Check if `/config/pyscript/door_manager_memory.json` exists
+- Check if `/config/pyscript/door_memory.json` exists
 - Verify file has proper permissions (should be readable/writable)
 - Check logs for file load errors
 
