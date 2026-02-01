@@ -154,10 +154,11 @@ def check_door_schedule():
         if v == "alerted" and k.startswith("conflict_"):
             try:
                 parts = k.split('_')
-                if len(parts) >= 3:
+                if len(parts) >= 4:
                     date_str = parts[2]
                     event_date = datetime.strptime(date_str, '%Y%m%d').date()
-                    if event_date >= now_date:
+                    # Keep if event is today OR yesterday (might still be active overnight)
+                    if event_date >= (now_date - timedelta(days=1)):
                         keep_entry = True
                     else:
                         cleaned_count += 1
