@@ -1,5 +1,5 @@
 # ==============================================================================
-#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION v1.14.0
+#  UNIFI ACCESS DOOR MANAGER - CONFIGURATION v2.0.1
 # ==============================================================================
 #  INSTRUCTIONS:
 #  1. Place this file in /config/pyscript/
@@ -24,9 +24,8 @@ Settings:
   # Option B: Hardcoded Text (Simple) - Uncomment to use
   # global_keyword_helper: "ALL"
 
-  # [REQUIRED] SYSTEM MEMORY
-  # Stores state to prevent notification spam.
-  memory_entity: input_text.door_manager_memory
+  # NOTE: Memory is now stored in /config/pyscript/door_memory.json (file-based)
+  # No input_text helper required!
 
   # NIGHT MODE (THE BOUNCER)
   # When does the building CLOSE (Lockdown Start) and OPEN (Lockdown End)?
@@ -157,24 +156,19 @@ Front Door:
 #     - Type: Toggle
 #     - Name: "Pause Door Schedule"
 #
-#  2. input_text.door_manager_memory
-#     - Type: Text
-#     - Name: "Door Manager Memory"
-#     - Max length: 4096 or higher
-#
-#  3. (Optional) input_text.global_door_keyword
+#  2. (Optional) input_text.global_door_keyword
 #     - Type: Text
 #     - Name: "Global Door Keyword"
 #
-#  4. (Optional) input_datetime.night_mode_start
+#  3. (Optional) input_datetime.night_mode_start
 #     - Type: Date and/or time (Time only)
 #     - Name: "Night Mode Start"
 #
-#  5. (Optional) input_datetime.night_mode_end
+#  4. (Optional) input_datetime.night_mode_end
 #     - Type: Date and/or time (Time only)
 #     - Name: "Night Mode End"
 #
-#  6. (Optional) Per-door helpers like:
+#  5. (Optional) Per-door helpers like:
 #     - input_text.door_keyword
 #     - input_number.front_door_pre_buffer (min: 0, max: 120, step: 5)
 #     - input_number.front_door_post_buffer (min: 0, max: 120, step: 5)
