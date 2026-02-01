@@ -414,7 +414,7 @@ def check_door_schedule():
             log.info(f"🔐 Should be open: {should_be_open}")
 
             # Override: Force lock during night mode hours
-            if now.hour < SAFE_HOUR_START or now.hour > SAFE_HOUR_END:
+            if now.hour < SAFE_HOUR_START or now.hour >= SAFE_HOUR_END:
                 log.info(f"🌙 Night mode override: Forcing door locked")
                 should_be_open = False
 
